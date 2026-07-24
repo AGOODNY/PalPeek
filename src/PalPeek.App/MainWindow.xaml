@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="PalPeek" Width="760" Height="560" MinWidth="620" MinHeight="420"
+        Icon="pack://application:,,,/PalPeek;component/Assets/palpeek.ico"
         Background="{StaticResource BackgroundBrush}" Foreground="#F4F6FA"
         WindowStartupLocation="CenterScreen">
     <Grid Margin="28">
@@ -9,11 +10,12 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
         <DockPanel>
             <StackPanel>
                 <TextBlock Text="PalPeek" FontSize="30" FontWeight="Bold"/>
-                <TextBlock Text="看看朋友正在玩什么" Foreground="#9DA8BA" Margin="0,3,0,0"/>
+                <TextBlock Text="选择 Tailnet 中正在直播的游戏" Foreground="#9DA8BA" Margin="0,3,0,0"/>
             </StackPanel>
             <StackPanel DockPanel.Dock="Right" HorizontalAlignment="Right">
                 <TextBlock Text="{Binding LocalStatus}" HorizontalAlignment="Right"/>
@@ -47,7 +49,7 @@
                                         <TextBlock Text="{Binding GameName}" FontSize="15" Margin="0,5,0,0"/>
                                         <TextBlock Text="{Binding Detail}" Foreground="#9DA8BA" Margin="0,4,0,0"/>
                                     </StackPanel>
-                                    <Button Grid.Column="1" Content="偷看一眼" VerticalAlignment="Center"
+                                    <Button Grid.Column="1" Content="{Binding WatchButtonText}" VerticalAlignment="Center"
                                             IsEnabled="{Binding CanWatch}"
                                             Click="WatchButton_Click" Tag="{Binding}"/>
                                 </Grid>
@@ -57,5 +59,8 @@
                 </ItemsControl>
             </ScrollViewer>
         </Grid>
+        <Button Grid.Row="3" Content="卸载 PalPeek…" Click="UninstallButton_Click"
+                HorizontalAlignment="Right" Margin="0,14,0,0"
+                Background="#343B4A" Foreground="#F4F6FA"/>
     </Grid>
 </Window>

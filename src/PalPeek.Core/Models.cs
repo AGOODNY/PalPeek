@@ -9,12 +9,14 @@ public static class Protocol
     public const int MaxViewers = 3;
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum StreamQuality
 {
     P720_60,
     P1080_60
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum CaptureState
 {
     Idle,

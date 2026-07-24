@@ -36,11 +36,13 @@ PalPeek 只提供观看，不提供远程控制。
 
 1. 打开项目的 [GitHub Releases](https://github.com/AGOODNY/PalPeek/releases)。
 2. 下载最新的 `PalPeek-Setup-*-x64.exe`。
+   同时下载同名的 `.sha256` 文件；传给其他人前可运行
+   `Get-FileHash .\PalPeek-Setup-*-x64.exe -Algorithm SHA256`，确认结果与校验文件一致。
 3. 双击安装程序并按提示完成安装。安装程序需要管理员权限来添加仅限 Tailscale
    地址范围的 Windows 防火墙规则。
 4. 在两台电脑上安装并登录
    [Tailscale Windows 客户端](https://tailscale.com/download/windows)，确保两台电脑出现在同一个
-   Tailnet 中。
+   Tailnet 中。访问https://console.tailscale.com/admin/users 邀请好友加入你的网络
 5. 启动 PalPeek。安装包已经包含 PalPeek 专用 Sunshine Host 和 Moonlight，无需另外安装它们。
 
 如果 Releases 页面还没有安装包，可以由项目维护者在 `E:\PalPeek` 构建本地测试包：

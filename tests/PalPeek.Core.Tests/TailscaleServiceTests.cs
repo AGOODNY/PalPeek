@@ -1,4 +1,5 @@
 using PalPeek.Core;
+using System.Net;
 
 namespace PalPeek.Core.Tests;
 
@@ -34,5 +35,8 @@ public sealed class TailscaleServiceTests
         var peer = Assert.Single(result.Peers);
         Assert.Equal("bob.example.ts.net", peer.DnsName);
         Assert.True(peer.Online);
+        Assert.True(result.ContainsAddress(IPAddress.Parse("100.64.0.1")));
+        Assert.True(result.ContainsAddress(IPAddress.Parse("::ffff:100.64.0.2")));
+        Assert.False(result.ContainsAddress(IPAddress.Parse("100.64.0.99")));
     }
 }

@@ -39,10 +39,13 @@ public sealed class SteamGameDetector
 {
     private static readonly TimeSpan StabilizeFor = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan StopGrace = TimeSpan.FromSeconds(10);
-    private readonly SteamCatalog _catalog;
+    private static readonly TimeSpan CatalogRefreshInterval = TimeSpan.FromSeconds(30);
+    private SteamCatalog _catalog;
+    private readonly Func<SteamCatalog> _refreshCatalog;
     private readonly IProcessSource _processes;
     private readonly IWindowLocator _windows;
     private readonly TimeProvider _clock;
+    private DateTimeOffset _nextCatalogRefresh;
 
     private Candidate? _candidate;
     private GameInfo? _active;
@@ -52,17 +55,27 @@ public sealed class SteamGameDetector
         SteamCatalog catalog,
         IProcessSource? processes = null,
         IWindowLocator? windows = null,
-        TimeProvider? clock = null)
+        TimeProvider? clock = null,
+        Func<SteamCatalog>? refreshCatalog = null)
     {
         _catalog = catalog;
+        _refreshCatalog = refreshCatalog ?? SteamCatalog.Discover;
         _processes = processes ?? new ProcessSource();
         _windows = windows ?? new WindowLocator();
         _clock = clock ?? TimeProvider.System;
+        _nextCatalogRefresh = _clock.GetUtcNow() + CatalogRefreshInterval;
     }
 
     public DetectionResult Tick()
     {
         var now = _clock.GetUtcNow();
+        if (now >= _nextCatalogRefresh)
+        {
+            _nextCatalogRefresh = now + CatalogRefreshInterval;
+            try { _catalog = _refreshCatalog(); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
+
         var matches = _processes.Snapshot()
             .Select(x => (Process: x, App: _catalog.MatchExecutable(x.ExecutablePath)))
             .Where(x => x.App is not null)
@@ -103,25 +116,39 @@ public sealed class SteamGameDetector
         }
 
         var foregroundPid = _windows.ForegroundProcessId();
-        var picked = matches.FirstOrDefault(x => x.Process.ProcessId == foregroundPid);
-        if (picked.App is null)
-            picked = matches[0];
-        var pickedApp = picked.App!;
-
-        var processIds = ProcessTree.DescendantsOf(picked.Process.ProcessId);
-        var candidates = _windows.FindForProcesses(processIds);
-        if (candidates.Count == 0)
+        var games = matches
+            .GroupBy(x => x.App!.AppId)
+            .Select(group =>
+            {
+                var processIds = group
+                    .SelectMany(x => ProcessTree.DescendantsOf(x.Process.ProcessId))
+                    .ToHashSet();
+                return new GameCandidate(
+                    group.First().App!,
+                    group.First().Process.ProcessId,
+                    processIds,
+                    _windows.FindForProcesses(processIds));
+            })
+            .Where(x => x.Windows.Count > 0)
+            .ToArray();
+        if (games.Length == 0)
         {
             _candidate = null;
             return new(CaptureState.WindowUnavailable, null, "已检测到 Steam 游戏，正在等待可捕获窗口。");
         }
 
-        var selectedWindow = SelectWindow(candidates);
+        var pickedGame = games.FirstOrDefault(x =>
+                             foregroundPid is not null &&
+                             (x.ProcessIds.Contains(foregroundPid.Value) ||
+                              x.Windows.Any(window => window.ProcessId == foregroundPid.Value)))
+                         ?? games.OrderByDescending(x => x.Windows.Max(window => window.Area)).First();
+        var selectedWindow = SelectWindow(pickedGame.Windows);
         if (_candidate is null ||
-            _candidate.App.AppId != pickedApp.AppId ||
+            _candidate.App.AppId != pickedGame.App.AppId ||
             _candidate.Window.Handle != selectedWindow.Handle)
         {
-            _candidate = new Candidate(pickedApp, picked.Process.ProcessId, selectedWindow, now);
+            _candidate = new Candidate(
+                pickedGame.App, pickedGame.RootProcessId, selectedWindow, now);
             return new(CaptureState.Stabilizing, null, "正在等待游戏窗口稳定。");
         }
 
@@ -151,4 +178,10 @@ public sealed class SteamGameDetector
         int RootProcessId,
         WindowCandidate Window,
         DateTimeOffset SeenSince);
+
+    private sealed record GameCandidate(
+        SteamApp App,
+        int RootProcessId,
+        IReadOnlySet<int> ProcessIds,
+        IReadOnlyList<WindowCandidate> Windows);
 }

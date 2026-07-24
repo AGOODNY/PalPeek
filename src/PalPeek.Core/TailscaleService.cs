@@ -11,10 +11,24 @@ public sealed record TailscaleSnapshot(
     IReadOnlyList<NodeIdentity> Peers,
     string? Error)
 {
-    public bool ContainsAddress(IPAddress? address) =>
-        address is not null &&
-        (IPAddress.IsLoopback(address) ||
-         Peers.Any(x => x.Online && IPAddress.TryParse(x.Ip, out var peer) && peer.Equals(address)));
+    public bool ContainsAddress(IPAddress? address)
+    {
+        if (address is null)
+            return false;
+        address = Normalize(address);
+        if (IPAddress.IsLoopback(address))
+            return true;
+        if (IPAddress.TryParse(SelfIp, out var self) && Normalize(self).Equals(address))
+            return true;
+        // Tailnet membership is the access boundary. An idle peer can briefly be
+        // reported as offline while its first request wakes the direct route.
+        return Peers.Any(x =>
+            IPAddress.TryParse(x.Ip, out var peer) &&
+            Normalize(peer).Equals(address));
+    }
+
+    private static IPAddress Normalize(IPAddress address) =>
+        address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address;
 }
 
 public interface ITailscaleService

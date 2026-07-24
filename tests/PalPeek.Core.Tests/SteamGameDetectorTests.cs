@@ -41,17 +41,61 @@ public sealed class SteamGameDetectorTests : IDisposable
         Assert.Equal(CaptureState.Idle, detector.Tick().State);
     }
 
-    private string CreateGame()
+    [Fact]
+    public void RefreshesCatalogAndSelectsTheForegroundGame()
     {
+        var initialCatalog = SteamCatalog.FromLibraries(new[] { _root });
+        var isaac = CreateGame("The Binding of Isaac: Rebirth", 250900, "The Binding of Isaac Rebirth");
+        var hollowKnight = CreateGame("Hollow Knight", 367520);
+        var refreshedCatalog = SteamCatalog.FromLibraries(new[] { _root });
+        var processes = new FakeProcesses
+        {
+            Items = new[]
+            {
+                new ProcessSnapshot(100, Path.Combine(isaac, "isaac-ng.exe")),
+                new ProcessSnapshot(200, Path.Combine(hollowKnight, "hollow_knight.exe"))
+            }
+        };
+        var windows = new FakeWindows
+        {
+            Items = new[]
+            {
+                new WindowCandidate(100, (nint)123, "Isaac", 1280 * 720),
+                new WindowCandidate(200, (nint)456, "Hollow Knight", 1280 * 720)
+            },
+            Foreground = 200
+        };
+        var clock = new FakeTime();
+        var detector = new SteamGameDetector(
+            initialCatalog, processes, windows, clock, () => refreshedCatalog);
+
+        Assert.Equal(CaptureState.Idle, detector.Tick().State);
+        clock.Advance(TimeSpan.FromSeconds(31));
+        Assert.Equal(CaptureState.Stabilizing, detector.Tick().State);
+        clock.Advance(TimeSpan.FromSeconds(5));
+        var ready = detector.Tick();
+
+        Assert.Equal(CaptureState.Ready, ready.State);
+        Assert.Equal((uint)367520, ready.Game!.AppId);
+        Assert.Equal("Hollow Knight", ready.Game.Name);
+        Assert.Equal(200, ready.Game.ProcessId);
+    }
+
+    private string CreateGame(
+        string name = "Detector Game",
+        uint appId = 99,
+        string? installDirectory = null)
+    {
+        installDirectory ??= name;
         var steamApps = Path.Combine(_root, "steamapps");
-        var install = Path.Combine(steamApps, "common", "Detector Game");
+        var install = Path.Combine(steamApps, "common", installDirectory);
         Directory.CreateDirectory(install);
-        File.WriteAllText(Path.Combine(steamApps, "appmanifest_99.acf"), """
+        File.WriteAllText(Path.Combine(steamApps, $"appmanifest_{appId}.acf"), $$"""
         "AppState"
         {
-            "appid" "99"
-            "name" "Detector Game"
-            "installdir" "Detector Game"
+            "appid" "{{appId}}"
+            "name" "{{name}}"
+            "installdir" "{{installDirectory}}"
         }
         """);
         return install;

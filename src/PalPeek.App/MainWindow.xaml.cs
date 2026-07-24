@@ -38,10 +38,17 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         _hostState = hostState;
         _sharing = sharing;
         _discovery.Changed += Discovery_Changed;
+        _discovery.ProbeFailed += Discovery_ProbeFailed;
         _hostState.Changed += HostState_Changed;
         _sharing.Changed += Sharing_Changed;
         Loaded += async (_, _) => await RefreshNetworkAsync();
-        Closed += (_, _) => _sharing.Changed -= Sharing_Changed;
+        Closed += (_, _) =>
+        {
+            _discovery.Changed -= Discovery_Changed;
+            _discovery.ProbeFailed -= Discovery_ProbeFailed;
+            _hostState.Changed -= HostState_Changed;
+            _sharing.Changed -= Sharing_Changed;
+        };
         UpdateSharingUi(_sharing.Get());
     }
 
@@ -85,6 +92,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
+    public event EventHandler? UninstallRequested;
 
     private async Task RefreshNetworkAsync()
     {
@@ -105,6 +113,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 Friends.Add(card);
             OnPropertyChanged(nameof(EmptyVisibility));
         });
+
+    private void Discovery_ProbeFailed(object? sender, FriendDiscoveryError error) =>
+        Dispatcher.Invoke(() =>
+            ShowBanner($"{error.Node.HostName}：{error.Message}"));
 
     private void HostState_Changed(object? sender, HostStatus status) =>
         Dispatcher.Invoke(() =>
@@ -155,6 +167,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return;
         await WatchAsync(card.Stream);
     }
+
+    private void UninstallButton_Click(object sender, RoutedEventArgs e) =>
+        UninstallRequested?.Invoke(this, EventArgs.Empty);
 
     private async Task WatchAsync(FriendStream stream)
     {
@@ -225,6 +240,7 @@ public sealed class FriendCard
     public FriendStream Stream { get; }
     public string Nickname => Stream.Status.Nickname;
     public string GameName => Stream.Status.Game?.Name ?? "游戏已结束";
+    public string WatchButtonText => $"观看 {GameName}";
     public string Detail =>
         $"在线 · {QualityText(Stream.Status.Quality)} · {Stream.Status.ViewerCount}/{Protocol.MaxViewers} 人观看 · {Stream.Node.HostName}";
     public bool CanWatch => Stream.Status.CanWatch;

@@ -22,10 +22,15 @@ public sealed class SunshineBridge : IHostedService, IAsyncDisposable
     private SunshineLifecycleStatus _lifecycle =
         new(SunshineProcessState.Stopped, null, 0, null);
 
-    public string ExecutablePath { get; } = Path.Combine(
+    public string PackagedExecutablePath { get; } = Path.Combine(
         AppContext.BaseDirectory, "runtime", "sunshine", "sunshine.exe");
+    public string RuntimeDirectory { get; } = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "PalPeek",
+        "sunshine-runtime");
+    public string ExecutablePath => Path.Combine(RuntimeDirectory, "sunshine.exe");
 
-    public bool IsInstalled => File.Exists(ExecutablePath);
+    public bool IsInstalled => File.Exists(PackagedExecutablePath);
     public bool IsRunning => IsProcessRunning(_process);
     public SunshineLifecycleStatus Lifecycle => _lifecycle;
 
@@ -46,9 +51,11 @@ public sealed class SunshineBridge : IHostedService, IAsyncDisposable
             if (!IsInstalled)
             {
                 SetLifecycle(SunshineProcessState.NotInstalled, null, "未找到内置 Sunshine Host。");
-                throw new FileNotFoundException("未找到内置 Sunshine Host。", ExecutablePath);
+                throw new FileNotFoundException(
+                    "未找到内置 Sunshine Host。", PackagedExecutablePath);
             }
 
+            PrepareRuntimeFiles();
             CleanupProcess();
             _stopping = false;
             var recovering = _hasStarted;
@@ -59,14 +66,16 @@ public sealed class SunshineBridge : IHostedService, IAsyncDisposable
                 null,
                 recovering ? "Sunshine 意外退出，正在恢复。" : "正在启动 Sunshine Host。");
 
-            var process = Process.Start(new ProcessStartInfo
+            var startInfo = new ProcessStartInfo
             {
                 FileName = ExecutablePath,
-                Arguments = "--config palpeek.conf",
                 WorkingDirectory = Path.GetDirectoryName(ExecutablePath)!,
                 UseShellExecute = false,
                 CreateNoWindow = true
-            }) ?? throw new InvalidOperationException("Windows 未能创建 Sunshine Host 进程。");
+            };
+            startInfo.ArgumentList.Add("palpeek.conf");
+            var process = Process.Start(startInfo) ??
+                throw new InvalidOperationException("Windows 未能创建 Sunshine Host 进程。");
 
             process.EnableRaisingEvents = true;
             process.Exited += Process_Exited;
@@ -104,6 +113,44 @@ public sealed class SunshineBridge : IHostedService, IAsyncDisposable
         {
             _lifecycleLock.Release();
         }
+    }
+
+    private void PrepareRuntimeFiles()
+    {
+        var packagedRoot = Path.GetDirectoryName(PackagedExecutablePath)!;
+        Directory.CreateDirectory(RuntimeDirectory);
+        CopyFileIfChanged(PackagedExecutablePath, ExecutablePath);
+        CopyFileIfChanged(
+            Path.Combine(packagedRoot, "palpeek.conf"),
+            Path.Combine(RuntimeDirectory, "palpeek.conf"));
+
+        var packagedAssets = Path.Combine(packagedRoot, "assets");
+        if (!Directory.Exists(packagedAssets))
+            throw new DirectoryNotFoundException($"Sunshine 运行资源缺失：{packagedAssets}");
+
+        foreach (var source in Directory.EnumerateFiles(
+                     packagedAssets, "*", SearchOption.AllDirectories))
+        {
+            var relative = Path.GetRelativePath(packagedAssets, source);
+            CopyFileIfChanged(source, Path.Combine(RuntimeDirectory, "assets", relative));
+        }
+        CopyFileIfChanged(
+            Path.Combine(packagedAssets, "apps.json"),
+            Path.Combine(RuntimeDirectory, "config", "apps.json"));
+    }
+
+    private static void CopyFileIfChanged(string source, string destination)
+    {
+        var sourceInfo = new FileInfo(source);
+        var destinationInfo = new FileInfo(destination);
+        if (destinationInfo.Exists &&
+            destinationInfo.Length == sourceInfo.Length &&
+            destinationInfo.LastWriteTimeUtc == sourceInfo.LastWriteTimeUtc)
+            return;
+
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        File.Copy(source, destination, overwrite: true);
+        File.SetLastWriteTimeUtc(destination, sourceInfo.LastWriteTimeUtc);
     }
 
     public async Task<SunshineRuntimeStatus> EnsureTargetAsync(

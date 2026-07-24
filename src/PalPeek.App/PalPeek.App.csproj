@@ -9,9 +9,13 @@
     <PlatformTarget>x64</PlatformTarget>
     <AssemblyName>PalPeek</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\palpeek.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\PalPeek.Core\PalPeek.Core.csproj" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Assets\palpeek.ico" />
   </ItemGroup>
 </Project>
