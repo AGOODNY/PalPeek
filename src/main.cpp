@@ -379,9 +379,11 @@ int main(int argc, char *argv[]) {
   reed_solomon_init();
   auto input_deinit_guard = input::init();
 
+#ifndef _WIN32
   if (input::probe_gamepads()) {
     BOOST_LOG(warning) << "No gamepad input is available"sv;
   }
+#endif
 
 #ifdef _WIN32
   // The IPC pipe must be ready before encoder probing so PalPeek can provide

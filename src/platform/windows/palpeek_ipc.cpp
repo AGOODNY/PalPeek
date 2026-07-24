@@ -123,8 +123,8 @@ namespace {
       {"audio", to_string(audio_state)},
       {"encoding", streaming ? "streaming" : to_string(encoding_state)},
       {"target", nullptr},
-      {"errorCode", active_error.code.empty() ? nlohmann::json {nullptr} : nlohmann::json {active_error.code}},
-      {"message", active_error.message.empty() ? nlohmann::json {nullptr} : nlohmann::json {active_error.message}}
+      {"errorCode", active_error.code.empty() ? nlohmann::json(nullptr) : nlohmann::json(active_error.code)},
+      {"message", active_error.message.empty() ? nlohmann::json(nullptr) : nlohmann::json(active_error.message)}
     };
     if (target) {
       response["target"] = {

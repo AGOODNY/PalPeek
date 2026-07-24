@@ -1626,14 +1626,27 @@ namespace input {
    * @param input_data The input message.
    */
   void passthrough(std::shared_ptr<input_t> &input, std::vector<std::uint8_t> &&input_data) {
+#ifdef _WIN32
+    // PalPeek is a view-only Windows host. Discard every client input packet
+    // before it can reach any operating-system input API.
+    (void) input;
+    (void) input_data;
+    return;
+#else
     {
       std::lock_guard<std::mutex> lg(input->input_queue_lock);
       input->input_queue.push_back(std::move(input_data));
     }
     task_pool.push(passthrough_next_message, input);
+#endif
   }
 
   void reset(std::shared_ptr<input_t> &input) {
+#ifdef _WIN32
+    // No input is ever injected by PalPeek, so there is nothing to release.
+    (void) input;
+    return;
+#else
     task_pool.cancel(key_press_repeat_id);
     task_pool.cancel(input->mouse_left_button_timeout);
 
@@ -1655,6 +1668,7 @@ namespace input {
         key_press[kp.first] = false;
       }
     });
+#endif
   }
 
   class deinit_t: public platf::deinit_t {
@@ -1665,12 +1679,18 @@ namespace input {
   };
 
   [[nodiscard]] std::unique_ptr<platf::deinit_t> init() {
+#ifndef _WIN32
     platf_input = platf::input();
+#endif
 
     return std::make_unique<deinit_t>();
   }
 
   bool probe_gamepads() {
+#ifdef _WIN32
+    // The PalPeek host intentionally exposes no virtual gamepad backend.
+    return true;
+#else
     auto input = static_cast<platf::input_t *>(platf_input.get());
     const auto gamepads = platf::supported_gamepads(input);
     for (auto &gamepad : gamepads) {
@@ -1679,6 +1699,7 @@ namespace input {
       }
     }
     return true;
+#endif
   }
 
   std::shared_ptr<input_t> alloc(safe::mail_t mail) {
@@ -1687,12 +1708,14 @@ namespace input {
       mail->queue<platf::gamepad_feedback_msg_t>(mail::gamepad_feedback)
     );
 
+#ifndef _WIN32
     // Workaround to ensure new frames will be captured when a client connects
     task_pool.pushDelayed([]() {
       platf::move_mouse(platf_input, 1, 1);
       platf::move_mouse(platf_input, -1, -1);
     },
                           100ms);
+#endif
 
     return input;
   }
