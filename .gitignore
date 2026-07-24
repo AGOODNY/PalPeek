@@ -1,0 +1,42 @@
+# IDE and user-specific state
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Local toolchains and dependency caches
+.tools/
+**/node_modules/
+**/.npm/
+
+# Build, test, packaging, and runtime output
+**/bin/
+**/obj/
+**/build/
+artifacts/
+runtime/
+dist/
+publish/
+TestResults/
+coverage/
+*.log
+*.tmp
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+*.local.json
+*.pfx
+*.p12
+*.pem
+*.key
+*.snk
+
+# OS metadata
+Thumbs.db
+Desktop.ini
+.DS_Store

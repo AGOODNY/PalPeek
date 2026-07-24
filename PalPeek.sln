@@ -1,0 +1,30 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PalPeek.Core", "src\PalPeek.Core\PalPeek.Core.csproj", "{EACB62EA-7A3A-4D4E-90F8-13F311415099}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PalPeek.App", "src\PalPeek.App\PalPeek.App.csproj", "{6EC3B55B-852D-44A8-8B9B-7ACF7ED3B7B1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PalPeek.Core.Tests", "tests\PalPeek.Core.Tests\PalPeek.Core.Tests.csproj", "{6B62485C-CC81-4452-8762-657A2CE65CE9}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{EACB62EA-7A3A-4D4E-90F8-13F311415099}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EACB62EA-7A3A-4D4E-90F8-13F311415099}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EACB62EA-7A3A-4D4E-90F8-13F311415099}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EACB62EA-7A3A-4D4E-90F8-13F311415099}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6EC3B55B-852D-44A8-8B9B-7ACF7ED3B7B1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6EC3B55B-852D-44A8-8B9B-7ACF7ED3B7B1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6EC3B55B-852D-44A8-8B9B-7ACF7ED3B7B1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6EC3B55B-852D-44A8-8B9B-7ACF7ED3B7B1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6B62485C-CC81-4452-8762-657A2CE65CE9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6B62485C-CC81-4452-8762-657A2CE65CE9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6B62485C-CC81-4452-8762-657A2CE65CE9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6B62485C-CC81-4452-8762-657A2CE65CE9}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

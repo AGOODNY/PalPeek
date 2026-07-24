@@ -1,0 +1,10 @@
+{
+  "env": {},
+  "apps": [
+    {
+      "name": "PalPeek Watch",
+      "auto-detach": true,
+      "wait-all": false
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+[submodule "third_party/Sunshine"]
+	path = third_party/Sunshine
+	url = git@github.com:AGOODNY/PalPeek.git
+	branch = sunshine-fork
