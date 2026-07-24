@@ -52,7 +52,7 @@ public sealed class SunshineProtocolTests
             () => SunshineProtocol.EnsureSuccess(json));
 
         Assert.Equal("invalid_window", error.Code);
-        Assert.Contains("unavailable", error.Message);
+        Assert.Equal("目标游戏窗口无效或已关闭。", error.Message);
     }
 
     [Fact]

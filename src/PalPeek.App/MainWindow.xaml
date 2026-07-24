@@ -18,6 +18,8 @@
             <StackPanel DockPanel.Dock="Right" HorizontalAlignment="Right">
                 <TextBlock Text="{Binding LocalStatus}" HorizontalAlignment="Right"/>
                 <TextBlock Text="{Binding NetworkStatus}" Foreground="#9DA8BA" HorizontalAlignment="Right"/>
+                <Button Content="{Binding ShareButtonText}" IsEnabled="{Binding CanToggleShare}"
+                        Click="ShareButton_Click" HorizontalAlignment="Right" Margin="0,10,0,0"/>
             </StackPanel>
         </DockPanel>
         <Border Grid.Row="1" Background="#252B39" CornerRadius="8" Padding="12"

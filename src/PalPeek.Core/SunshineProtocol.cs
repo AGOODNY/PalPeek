@@ -99,9 +99,13 @@ public static class SunshineProtocol
             root.TryGetProperty("errorCode", out var errorCode) && errorCode.ValueKind == JsonValueKind.String
                 ? errorCode.GetString()
                 : null,
-            root.TryGetProperty("message", out var message) && message.ValueKind == JsonValueKind.String
-                ? message.GetString()
-                : null);
+            LocalizeHostError(
+                root.TryGetProperty("errorCode", out errorCode) && errorCode.ValueKind == JsonValueKind.String
+                    ? errorCode.GetString()
+                    : null,
+                root.TryGetProperty("message", out var message) && message.ValueKind == JsonValueKind.String
+                    ? message.GetString()
+                    : null));
     }
 
     public static void EnsureSuccess(string response)
@@ -146,7 +150,38 @@ public static class SunshineProtocol
         }
 
         document.Dispose();
-        throw new SunshineProtocolException(code, message);
+        throw new SunshineProtocolException(code, LocalizeHostError(code, message) ?? message);
+    }
+
+    private static string? LocalizeHostError(string? code, string? fallback)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+            return fallback;
+
+        return code switch
+        {
+            "protocol_version_mismatch" => "PalPeek 与 Host 的协议版本不兼容。",
+            "invalid_window" => "目标游戏窗口无效或已关闭。",
+            "target_unavailable" or "window_unavailable" =>
+                "目标游戏窗口暂时不可用。",
+            "capture_api_unavailable" => "当前系统不支持游戏窗口捕获。",
+            "window_capture_failed" or "capture_session_failed" or
+                "capture_start_failed" or "frame_capture_failed" =>
+                "捕获游戏窗口失败。",
+            "audio_target_unavailable" or "process_audio_unavailable" =>
+                "无法获得目标游戏的音频。",
+            "process_audio_init_failed" or "process_audio_start_failed" or
+                "process_audio_event_failed" =>
+                "启动游戏进程音频采集失败。",
+            "stale_session" => "观战会话已经结束。",
+            "invalid_pin" => "Moonlight 配对码无效。",
+            "pairing_rejected" => "Sunshine 拒绝了 Moonlight 配对请求。",
+            "unknown_command" => "PalPeek Host 不支持这项操作。",
+            "command_too_large" or "invalid_json" =>
+                "PalPeek Host 收到了无效请求。",
+            "internal_error" => "PalPeek Host 发生内部错误。",
+            _ => $"PalPeek Host 发生错误（{code}）。"
+        };
     }
 
     private static T ReadEnum<T>(JsonElement root, string propertyName) where T : struct, Enum

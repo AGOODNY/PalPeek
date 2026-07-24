@@ -57,7 +57,7 @@ public sealed class LeaseManager
         {
             PruneCore();
             if (!_leases.TryGetValue(id, out var current))
-                throw new KeyNotFoundException("The viewer lease has expired.");
+                throw new KeyNotFoundException("观看名额已过期，请重新进入观战。");
             return RenewCore(current);
         }
     }

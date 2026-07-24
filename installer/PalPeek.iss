@@ -1,6 +1,6 @@
 #define MyAppName "PalPeek"
 #define MyAppVersion "0.1.0"
-#define MyAppPublisher "PalPeek contributors"
+#define MyAppPublisher "PalPeek 开源项目"
 #define MyAppExeName "PalPeek.exe"
 
 [Setup]
@@ -20,6 +20,9 @@ SolidCompression=yes
 WizardStyle=modern
 LicenseFile=..\LICENSE
 UninstallDisplayIcon={app}\{#MyAppExeName}
+
+[Languages]
+Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 
 [Files]
 Source: "..\artifacts\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

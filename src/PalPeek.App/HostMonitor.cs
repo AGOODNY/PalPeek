@@ -12,6 +12,8 @@ public sealed class HostMonitor : BackgroundService
     private readonly LeaseManager _leases;
     private readonly EventHub _events;
     private readonly PalPeekOptions _options;
+    private readonly SharingControl _sharing;
+    private readonly SemaphoreSlim _wake = new(0, 1);
     private GameInfo? _lastGame;
 
     public HostMonitor(
@@ -21,7 +23,8 @@ public sealed class HostMonitor : BackgroundService
         HostStateStore state,
         LeaseManager leases,
         EventHub events,
-        PalPeekOptions options)
+        PalPeekOptions options,
+        SharingControl sharing)
     {
         _detector = detector;
         _tailscale = tailscale;
@@ -30,6 +33,8 @@ public sealed class HostMonitor : BackgroundService
         _leases = leases;
         _events = events;
         _options = options;
+        _sharing = sharing;
+        _sharing.Changed += Sharing_Changed;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -38,10 +43,12 @@ public sealed class HostMonitor : BackgroundService
         {
             var tailnet = await _tailscale.GetSnapshotAsync(stoppingToken);
             var detection = _detector.Tick();
+            _sharing.UpdateDetection(detection.Game, detection.Message);
+            var sharing = _sharing.Get();
             var message = tailnet.Running ? detection.Message : tailnet.Error;
             var captureState = detection.State;
 
-            if (detection.Game is not null && tailnet.Running)
+            if (sharing.SharingEnabled && detection.Game is not null && tailnet.Running)
             {
                 try
                 {
@@ -85,17 +92,18 @@ public sealed class HostMonitor : BackgroundService
             foreach (var expired in _leases.Prune())
                 Publish("viewer.left", detection.Game, expired.ViewerName);
 
-            var viewers = detection.Game is null ? 0 : _leases.Active(detection.Game.SessionId).Count;
+            var sharedGame = _sharing.Get().SharingEnabled ? detection.Game : null;
+            var viewers = sharedGame is null ? 0 : _leases.Active(sharedGame.SessionId).Count;
             var status = new HostStatus(
                 Protocol.SchemaVersion,
                 _options.Nickname,
                 BuildInfo.Version,
                 tailnet.Running,
-                detection.Game,
-                captureState,
+                sharedGame,
+                sharedGame is null ? CaptureState.Idle : captureState,
                 _options.Quality,
                 viewers,
-                tailnet.Running && detection.Game is not null &&
+                tailnet.Running && sharedGame is not null &&
                 captureState == CaptureState.Ready && viewers < Protocol.MaxViewers,
                 message);
             var previous = _state.Get();
@@ -106,8 +114,21 @@ public sealed class HostMonitor : BackgroundService
             else if (status.Game is not null && previous != status)
                 Publish("stream.updated", status.Game);
 
-            await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
+            await _wake.WaitAsync(TimeSpan.FromSeconds(2), stoppingToken);
         }
+    }
+
+    private void Sharing_Changed(object? sender, SharingSnapshot snapshot)
+    {
+        if (_wake.CurrentCount == 0)
+            _wake.Release();
+    }
+
+    public override void Dispose()
+    {
+        _sharing.Changed -= Sharing_Changed;
+        _wake.Dispose();
+        base.Dispose();
     }
 
     private static CaptureState MapCaptureState(SunshineRuntimeStatus status)

@@ -31,6 +31,7 @@ public partial class App : System.Windows.Application
                 services.AddSingleton<LeaseManager>();
                 services.AddSingleton<EventHub>();
                 services.AddSingleton<HostStateStore>();
+                services.AddSingleton<SharingControl>();
                 services.AddSingleton<SunshineBridge>();
                 services.AddHostedService(
                     sp => sp.GetRequiredService<SunshineBridge>());
