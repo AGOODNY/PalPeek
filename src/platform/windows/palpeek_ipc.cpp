@@ -212,13 +212,14 @@ namespace {
     if (command == "pair") {
       const auto pin = request.value("pin", "");
       const auto client_id = request.value("clientId", "PalPeek");
+      const auto client_address = request.value("clientAddress", "");
       if (pin.size() != 4 ||
           !std::all_of(pin.begin(), pin.end(), [](unsigned char value) {
             return value >= '0' && value <= '9';
           })) {
         return error_response("invalid_pin", "Pairing PIN must contain four digits");
       }
-      const bool accepted = nvhttp::pin(pin, client_id);
+      const bool accepted = nvhttp::pin(pin, client_id, client_address);
       return accepted
         ? nlohmann::json {{"ok", true}}
         : error_response("pairing_rejected", "No matching Moonlight pairing request");

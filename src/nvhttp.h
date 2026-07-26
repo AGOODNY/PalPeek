@@ -85,6 +85,7 @@ namespace nvhttp {
       std::string uniqueID = {};
       std::string cert = {};
       std::string name = {};
+      std::string address = {};
     } client;
 
     std::unique_ptr<crypto::aes_t> cipher_key = {};
@@ -173,7 +174,7 @@ namespace nvhttp {
    * bool pin_status = nvhttp::pin("1234", "laptop");
    * @examples_end
    */
-  bool pin(std::string pin, std::string name);
+  bool pin(std::string pin, std::string name, std::string_view address = {});
 
   /**
    * @brief Remove single client.

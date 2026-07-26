@@ -8,6 +8,7 @@
 // standard includes
 #include <filesystem>
 #include <format>
+#include <mutex>
 #include <string>
 #include <utility>
 
@@ -144,6 +145,7 @@ namespace nvhttp {
 
   // uniqueID, session
   std::unordered_map<std::string, pair_session_t> map_id_sess;
+  std::mutex map_id_sess_mutex;
   client_t client_root;
   std::atomic<uint32_t> session_id_counter;
 
@@ -555,6 +557,7 @@ namespace nvhttp {
   template<class T>
   void pair(std::shared_ptr<safe::queue_t<crypto::x509_t>> &add_cert, std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response, std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request) {
     print_req<T>(request);
+    std::scoped_lock pairing_lock(map_id_sess_mutex);
 
     pt::ptree tree;
 
@@ -583,9 +586,13 @@ namespace nvhttp {
 
         sess.client.uniqueID = std::move(uniqID);
         sess.client.cert = util::from_hex_vec(get_arg(args, "clientcert"), true);
+        sess.client.address = request->remote_endpoint().address().to_string();
 
         BOOST_LOG(debug) << sess.client.cert;
-        auto ptr = map_id_sess.emplace(sess.client.uniqueID, std::move(sess)).first;
+        auto ptr = map_id_sess.insert_or_assign(
+          sess.client.uniqueID,
+          std::move(sess)
+        ).first;
 
         ptr->second.async_insert_pin.salt = std::move(get_arg(args, "salt"));
         if (config::sunshine.flags[config::flag::PIN_STDIN]) {
@@ -635,7 +642,8 @@ namespace nvhttp {
     }
   }
 
-  bool pin(std::string pin, std::string name) {
+  bool pin(std::string pin, std::string name, std::string_view address) {
+    std::scoped_lock pairing_lock(map_id_sess_mutex);
     pt::ptree tree;
     if (map_id_sess.empty()) {
       return false;
@@ -660,7 +668,31 @@ namespace nvhttp {
       return false;
     }
 
-    auto &sess = std::begin(map_id_sess)->second;
+    auto pending = std::end(map_id_sess);
+    for (auto it = std::begin(map_id_sess); it != std::end(map_id_sess); ++it) {
+      auto &candidate = it->second;
+      auto &response = candidate.async_insert_pin.response;
+      const bool response_ready =
+        (response.has_left() && response.left()) ||
+        (response.has_right() && response.right());
+      if (candidate.last_phase != PAIR_PHASE::NONE ||
+          !response_ready ||
+          (!address.empty() && candidate.client.address != address)) {
+        continue;
+      }
+
+      // Never apply a PIN to an arbitrary session. Without an address match,
+      // multiple pending clients are ambiguous and must retry individually.
+      if (pending != std::end(map_id_sess)) {
+        return false;
+      }
+      pending = it;
+    }
+    if (pending == std::end(map_id_sess)) {
+      return false;
+    }
+
+    auto &sess = pending->second;
     getservercert(sess, tree, pin);
     sess.client.name = name;
 
