@@ -74,19 +74,40 @@ public sealed class PeerApiService : BackgroundService
         });
 
         _app.MapGet("/api/v1/status", () => Results.Ok(_state.Get()));
-        _app.MapPost("/api/v1/pair", async (PairRequest request, CancellationToken token) =>
+        _app.MapPost("/api/v1/pair", async (
+            HttpContext context,
+            PairRequest request,
+            CancellationToken token) =>
         {
             if (request.SchemaVersion != Protocol.SchemaVersion ||
                 request.Pin.Length != 4 || !request.Pin.All(char.IsDigit))
                 return Results.BadRequest(new ApiError(Protocol.SchemaVersion, "invalid_pair_request", "配对请求无效。"));
             try
             {
-                await _sunshine.PairAsync(request.Pin, request.ClientId, token);
+                var remoteAddress = context.Connection.RemoteIpAddress;
+                var clientAddress = remoteAddress is null
+                    ? string.Empty
+                    : (remoteAddress.IsIPv4MappedToIPv6
+                        ? remoteAddress.MapToIPv4()
+                        : remoteAddress).ToString();
+                await _sunshine.PairAsync(
+                    request.Pin,
+                    request.ClientId,
+                    clientAddress,
+                    token);
                 return Results.Ok(new { schemaVersion = Protocol.SchemaVersion, paired = true });
+            }
+            catch (SunshineProtocolException ex)
+            {
+                return Results.Json(
+                    new ApiError(Protocol.SchemaVersion, ex.Code, ex.Message),
+                    statusCode: StatusCodes.Status503ServiceUnavailable);
             }
             catch (Exception ex)
             {
-                return Results.Problem(ex.Message, statusCode: 503);
+                return Results.Json(
+                    new ApiError(Protocol.SchemaVersion, "pairing_failed", ex.Message),
+                    statusCode: StatusCodes.Status503ServiceUnavailable);
             }
         });
         _app.MapPost("/api/v1/reservations", (ReservationRequest request) =>

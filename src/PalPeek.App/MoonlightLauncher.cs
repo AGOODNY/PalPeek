@@ -4,19 +4,25 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 
 namespace PalPeek;
 
 public sealed class MoonlightLauncher
 {
+    private const string SettingsFileName = "Moonlight.ini";
+    private static readonly TimeSpan PairingTimeout = TimeSpan.FromSeconds(45);
     private readonly PalPeekOptions _options;
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(5) };
+    private readonly HttpClient _pairingHttp = new() { Timeout = Timeout.InfiniteTimeSpan };
 
     public MoonlightLauncher(PalPeekOptions options) => _options = options;
 
     public string ExecutablePath { get; } = Path.Combine(
         AppContext.BaseDirectory, "runtime", "moonlight", "moonlight.exe");
+    public string ProfileDirectory { get; } = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "PalPeek",
+        "moonlight-profile");
 
     public bool IsInstalled => File.Exists(ExecutablePath);
 
@@ -85,9 +91,10 @@ public sealed class MoonlightLauncher
         string viewerId,
         CancellationToken cancellationToken)
     {
-        using var pairing = StartProcess($"pair \"{host}\"", redirectOutput: true);
-        var pinReady = new TaskCompletionSource<string>(
-            TaskCreationOptions.RunContinuationsAsynchronously);
+        var pin = MoonlightCommandLine.GeneratePairingPin();
+        using var pairing = StartProcess(
+            MoonlightCommandLine.Pair(host, pin),
+            redirectOutput: true);
         var output = new StringBuilder();
         void Observe(string? line)
         {
@@ -95,9 +102,6 @@ public sealed class MoonlightLauncher
                 return;
             lock (output)
                 output.AppendLine(line);
-            var match = Regex.Match(line, @"(?<!\d)\d{4}(?!\d)");
-            if (match.Success)
-                pinReady.TrySetResult(match.Value);
         }
 
         pairing.OutputDataReceived += (_, e) => Observe(e.Data);
@@ -105,51 +109,120 @@ public sealed class MoonlightLauncher
         pairing.BeginOutputReadLine();
         pairing.BeginErrorReadLine();
 
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(15));
-        var processExit = pairing.WaitForExitAsync(timeout.Token);
-        var completed = await Task.WhenAny(pinReady.Task, processExit);
-        if (completed == pinReady.Task)
+        try
         {
-            using var response = await _http.PostAsJsonAsync(
-                $"{baseUrl}/api/v1/pair",
-                new PairRequest(Protocol.SchemaVersion, viewerId, await pinReady.Task),
-                cancellationToken);
-            if (!response.IsSuccessStatusCode)
-                throw await CreateApiException(response, cancellationToken);
-        }
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(PairingTimeout);
+            using var submitCancellation =
+                CancellationTokenSource.CreateLinkedTokenSource(timeout.Token);
+            var processExit = pairing.WaitForExitAsync(timeout.Token);
+            var submitPin = SubmitPairingPinAsync(
+                baseUrl,
+                viewerId,
+                pin,
+                submitCancellation.Token);
+            var completed = await Task.WhenAny(processExit, submitPin);
 
-        await processExit;
-        pairing.WaitForExit(); // Flush asynchronous output handlers.
-        var text = output.ToString();
-        var alreadyPaired = text.Contains("already paired", StringComparison.OrdinalIgnoreCase);
-        if (pairing.ExitCode != 0 && !alreadyPaired)
-            throw new InvalidOperationException($"自动配对失败：{text.Trim()}");
+            if (completed == processExit)
+            {
+                await processExit;
+                pairing.WaitForExit(); // Flush asynchronous output handlers.
+                var earlyOutput = output.ToString();
+                var exitedAlreadyPaired =
+                    earlyOutput.Contains("already paired", StringComparison.OrdinalIgnoreCase);
+                if (pairing.ExitCode == 0 || exitedAlreadyPaired)
+                {
+                    submitCancellation.Cancel();
+                    try { await submitPin; } catch (OperationCanceledException) { }
+                    return;
+                }
+
+                submitCancellation.Cancel();
+                try { await submitPin; } catch (OperationCanceledException) { }
+                throw new InvalidOperationException($"自动配对失败：{earlyOutput.Trim()}");
+            }
+
+            await submitPin;
+            await processExit;
+            pairing.WaitForExit(); // Flush asynchronous output handlers.
+            var text = output.ToString();
+            var alreadyPaired = text.Contains("already paired", StringComparison.OrdinalIgnoreCase);
+            if (pairing.ExitCode != 0 && !alreadyPaired)
+                throw new InvalidOperationException($"自动配对失败：{text.Trim()}");
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                if (!pairing.HasExited)
+                    pairing.Kill(entireProcessTree: true);
+            }
+            catch (InvalidOperationException) { }
+            if (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested)
+            {
+                throw new TimeoutException(
+                    $"自动配对等待超过 {PairingTimeout.TotalSeconds:0} 秒，请确认双方网络稳定后重试。",
+                    ex);
+            }
+            throw;
+        }
+    }
+
+    private async Task SubmitPairingPinAsync(
+        string baseUrl,
+        string viewerId,
+        string pin,
+        CancellationToken cancellationToken)
+    {
+        using var response = await _pairingHttp.PostAsJsonAsync(
+            $"{baseUrl}/api/v1/pair",
+            new PairRequest(Protocol.SchemaVersion, viewerId, pin),
+            cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            throw await CreateApiException(response, cancellationToken);
     }
 
     private Process StartStream(string host)
-    {
-        var quality = _options.Quality == StreamQuality.P1080_60
-            ? "--resolution 1920x1080 --fps 60 --bitrate 8000"
-            : "--resolution 1280x720 --fps 60 --bitrate 4000";
-        return StartProcess(
-            $"stream \"{host}\" \"PalPeek Watch\" {quality} --video-codec H264 --hdr off --display-mode windowed",
+        => StartProcess(
+            MoonlightCommandLine.Stream(host, _options.Quality),
             redirectOutput: false);
-    }
 
-    private Process StartProcess(string arguments, bool redirectOutput)
+    private Process StartProcess(IEnumerable<string> arguments, bool redirectOutput)
     {
-        var process = Process.Start(new ProcessStartInfo
+        PrepareProfileDirectory();
+        var startInfo = new ProcessStartInfo
         {
             FileName = ExecutablePath,
-            Arguments = arguments,
-            WorkingDirectory = Path.GetDirectoryName(ExecutablePath)!,
+            WorkingDirectory = ProfileDirectory,
             UseShellExecute = false,
             RedirectStandardOutput = redirectOutput,
             RedirectStandardError = redirectOutput,
             CreateNoWindow = redirectOutput
-        });
+        };
+        foreach (var argument in arguments)
+            startInfo.ArgumentList.Add(argument);
+
+        var process = Process.Start(startInfo);
         return process ?? throw new InvalidOperationException("无法启动 Moonlight。");
+    }
+
+    private void PrepareProfileDirectory()
+    {
+        Directory.CreateDirectory(ProfileDirectory);
+
+        var packagedDirectory = Path.GetDirectoryName(ExecutablePath)!;
+        var packagedPortableMarker = Path.Combine(packagedDirectory, "portable.dat");
+        var profilePortableMarker = Path.Combine(ProfileDirectory, "portable.dat");
+        if (File.Exists(packagedPortableMarker) && !File.Exists(profilePortableMarker))
+            File.Copy(packagedPortableMarker, profilePortableMarker);
+
+        // Older PalPeek builds asked portable Moonlight to store its state beside
+        // moonlight.exe. Preserve any pairing created by an elevated installer run,
+        // then keep all future state in the per-user writable profile.
+        var legacySettings = Path.Combine(packagedDirectory, SettingsFileName);
+        var profileSettings = Path.Combine(ProfileDirectory, SettingsFileName);
+        if (File.Exists(legacySettings) && !File.Exists(profileSettings))
+            File.Copy(legacySettings, profileSettings);
     }
 
     private async Task HeartbeatAsync(string baseUrl, string leaseId, CancellationToken cancellationToken)

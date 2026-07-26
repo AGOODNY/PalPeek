@@ -113,6 +113,9 @@ public static class SunshineProtocol
         using var _ = ParseSuccessfulResponse(response);
     }
 
+    public static bool IsRetryablePairingError(Exception exception) =>
+        exception is SunshineProtocolException { Code: "pairing_rejected" };
+
     private static JsonDocument ParseSuccessfulResponse(string response)
     {
         if (string.IsNullOrWhiteSpace(response))

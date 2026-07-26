@@ -13,6 +13,8 @@ public sealed class SunshineBridge : IHostedService, IAsyncDisposable
     private static readonly TimeSpan StartupTimeout = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan PairingTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan PairingRetryDelay = TimeSpan.FromMilliseconds(250);
     private readonly SemaphoreSlim _commandLock = new(1, 1);
     private readonly SemaphoreSlim _lifecycleLock = new(1, 1);
     private Process? _process;
@@ -55,8 +57,9 @@ public sealed class SunshineBridge : IHostedService, IAsyncDisposable
                     "未找到内置 Sunshine Host。", PackagedExecutablePath);
             }
 
-            PrepareRuntimeFiles();
             CleanupProcess();
+            await StopOrphanedRuntimeHostsAsync(cancellationToken);
+            PrepareRuntimeFiles();
             _stopping = false;
             var recovering = _hasStarted;
             if (recovering)
@@ -134,9 +137,26 @@ public sealed class SunshineBridge : IHostedService, IAsyncDisposable
             var relative = Path.GetRelativePath(packagedAssets, source);
             CopyFileIfChanged(source, Path.Combine(RuntimeDirectory, "assets", relative));
         }
-        CopyFileIfChanged(
-            Path.Combine(packagedAssets, "apps.json"),
-            Path.Combine(RuntimeDirectory, "config", "apps.json"));
+        var runtimeAppsPath = Path.Combine(RuntimeDirectory, "config", "apps.json");
+        CopyFileIfChanged(Path.Combine(packagedAssets, "apps.json"), runtimeAppsPath);
+        ValidateWatchAppDefinition(runtimeAppsPath);
+    }
+
+    private static void ValidateWatchAppDefinition(string appsPath)
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(appsPath));
+        if (!document.RootElement.TryGetProperty("apps", out var apps) ||
+            apps.ValueKind != JsonValueKind.Array ||
+            !apps.EnumerateArray().Any(app =>
+                app.TryGetProperty("name", out var name) &&
+                string.Equals(
+                    name.GetString(),
+                    MoonlightCommandLine.AppName,
+                    StringComparison.Ordinal)))
+        {
+            throw new InvalidDataException(
+                $"PalPeek Host 应用配置无效，缺少“{MoonlightCommandLine.AppName}”：{appsPath}");
+        }
     }
 
     private static void CopyFileIfChanged(string source, string destination)
@@ -197,14 +217,44 @@ public sealed class SunshineBridge : IHostedService, IAsyncDisposable
     public async Task SetTargetAsync(GameInfo game, CancellationToken cancellationToken) =>
         _ = await EnsureTargetAsync(game, cancellationToken);
 
-    public Task PairAsync(string pin, string clientId, CancellationToken cancellationToken) =>
-        SendAsync(new
+    public async Task PairAsync(
+        string pin,
+        string clientId,
+        string clientAddress,
+        CancellationToken cancellationToken)
+    {
+        var pairingTimer = Stopwatch.StartNew();
+        while (true)
         {
-            protocolVersion = SunshineProtocol.Version,
-            command = "pair",
-            pin,
-            clientId
-        }, cancellationToken);
+            try
+            {
+                await SendAsync(new
+                {
+                    protocolVersion = SunshineProtocol.Version,
+                    command = "pair",
+                    pin,
+                    clientId,
+                    clientAddress
+                }, cancellationToken);
+                return;
+            }
+            catch (Exception ex) when (SunshineProtocol.IsRetryablePairingError(ex))
+            {
+                // Moonlight prints the PIN before Sunshine has necessarily registered
+                // its asynchronous pairing request. Give that request time to arrive.
+                var remaining = PairingTimeout - pairingTimer.Elapsed;
+                if (remaining <= TimeSpan.Zero)
+                {
+                    throw new SunshineProtocolException(
+                        "pairing_timeout",
+                        "Moonlight 配对请求在 30 秒内未到达，请重新点击观看游戏。");
+                }
+                await Task.Delay(
+                    remaining < PairingRetryDelay ? remaining : PairingRetryDelay,
+                    cancellationToken);
+            }
+        }
+    }
 
     public Task StopSessionsAsync(CancellationToken cancellationToken) =>
         SendAsync(new
@@ -378,6 +428,77 @@ public sealed class SunshineBridge : IHostedService, IAsyncDisposable
         _process.Exited -= Process_Exited;
         _process.Dispose();
         _process = null;
+    }
+
+    private async Task StopOrphanedRuntimeHostsAsync(CancellationToken cancellationToken)
+    {
+        foreach (var process in FindOrphanedRuntimeHosts())
+        {
+            using (process)
+            {
+                try
+                {
+                    var response = await SendRawAsync(new
+                    {
+                        protocolVersion = SunshineProtocol.Version,
+                        command = "shutdown"
+                    }, cancellationToken);
+                    SunshineProtocol.EnsureSuccess(response);
+                }
+                catch (Exception ex) when (
+                    ex is IOException or TimeoutException or SunshineProtocolException)
+                {
+                    // An orphan may have lost its IPC pipe. It is still safe to stop
+                    // because its executable path is PalPeek's private runtime copy.
+                }
+
+                if (!IsProcessRunning(process))
+                    continue;
+
+                using var shutdown =
+                    CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                shutdown.CancelAfter(ShutdownTimeout);
+                try
+                {
+                    await process.WaitForExitAsync(shutdown.Token);
+                }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    process.Kill(entireProcessTree: true);
+                    await process.WaitForExitAsync(cancellationToken);
+                }
+            }
+        }
+    }
+
+    private List<Process> FindOrphanedRuntimeHosts()
+    {
+        var result = new List<Process>();
+        foreach (var process in Process.GetProcessesByName(
+                     Path.GetFileNameWithoutExtension(ExecutablePath)))
+        {
+            try
+            {
+                if (string.Equals(
+                        Path.GetFullPath(process.MainModule?.FileName ?? string.Empty),
+                        Path.GetFullPath(ExecutablePath),
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    result.Add(process);
+                    continue;
+                }
+            }
+            catch (Exception ex) when (
+                ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                // Processes that exit during enumeration, or cannot be inspected,
+                // must not be treated as PalPeek-owned.
+            }
+
+            process.Dispose();
+        }
+
+        return result;
     }
 
     private void SetLifecycle(SunshineProcessState state, int? processId, string? message)

@@ -242,7 +242,11 @@ public sealed class FriendCard
     public string GameName => Stream.Status.Game?.Name ?? "游戏已结束";
     public string WatchButtonText => $"观看 {GameName}";
     public string Detail =>
-        $"在线 · {QualityText(Stream.Status.Quality)} · {Stream.Status.ViewerCount}/{Protocol.MaxViewers} 人观看 · {Stream.Node.HostName}";
+        $"在线 · {QualityText(Stream.Status.Quality)} · {Stream.Status.ViewerCount}/{Protocol.MaxViewers} 人观看 · " +
+        $"{Stream.Node.HostName} · v{Stream.Status.Version}" +
+        (Stream.Status.CanWatch || string.IsNullOrWhiteSpace(Stream.Status.Message)
+            ? string.Empty
+            : $" · 准备中：{Stream.Status.Message}");
     public bool CanWatch => Stream.Status.CanWatch;
 
     private static string QualityText(StreamQuality quality) =>

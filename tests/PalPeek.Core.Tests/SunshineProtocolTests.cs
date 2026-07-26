@@ -74,4 +74,15 @@ public sealed class SunshineProtocolTests
 
         Assert.Equal("protocol_version_mismatch", error.Code);
     }
+
+    [Theory]
+    [InlineData("pairing_rejected", true)]
+    [InlineData("invalid_pin", false)]
+    [InlineData("internal_error", false)]
+    public void PairingRetryOnlyHandlesPendingMoonlightRequest(string code, bool expected)
+    {
+        var error = new SunshineProtocolException(code, "test");
+
+        Assert.Equal(expected, SunshineProtocol.IsRetryablePairingError(error));
+    }
 }
