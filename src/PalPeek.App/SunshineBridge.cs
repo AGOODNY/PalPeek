@@ -224,6 +224,7 @@ public sealed class SunshineBridge : IHostedService, IAsyncDisposable
         CancellationToken cancellationToken)
     {
         var pairingTimer = Stopwatch.StartNew();
+        var useUniquePendingRequestFallback = false;
         while (true)
         {
             try
@@ -234,12 +235,19 @@ public sealed class SunshineBridge : IHostedService, IAsyncDisposable
                     command = "pair",
                     pin,
                     clientId,
-                    clientAddress
+                    // Prefer the exact peer address. If Sunshine represented the
+                    // same Tailscale address differently (for example mapped IPv6),
+                    // retry without it. The Sunshine fork only accepts that fallback
+                    // when exactly one pending Moonlight request exists.
+                    clientAddress = useUniquePendingRequestFallback
+                        ? string.Empty
+                        : clientAddress
                 }, cancellationToken);
                 return;
             }
             catch (Exception ex) when (SunshineProtocol.IsRetryablePairingError(ex))
             {
+                useUniquePendingRequestFallback = true;
                 // Moonlight prints the PIN before Sunshine has necessarily registered
                 // its asynchronous pairing request. Give that request time to arrive.
                 var remaining = PairingTimeout - pairingTimer.Elapsed;

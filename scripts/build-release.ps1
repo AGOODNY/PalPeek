@@ -1,7 +1,8 @@
 param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Release",
-    [switch]$SkipTests
+    [switch]$SkipTests,
+    [switch]$SkipRestore
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,10 +20,14 @@ function Assert-LastExitCode([string]$Step) {
     }
 }
 
-& $dotnet restore (Join-Path $projectRoot "PalPeek.sln")
-Assert-LastExitCode "dotnet restore"
+if (-not $SkipRestore) {
+    & $dotnet restore (Join-Path $projectRoot "PalPeek.sln")
+    Assert-LastExitCode "dotnet restore"
+}
 if (-not $SkipTests) {
-    & $dotnet test (Join-Path $projectRoot "PalPeek.sln") -c $Configuration --no-restore
+    $testArgs = @("test", (Join-Path $projectRoot "PalPeek.sln"), "-c", $Configuration)
+    $testArgs += "--no-restore"
+    & $dotnet @testArgs
     Assert-LastExitCode "dotnet test"
 }
 
@@ -35,12 +40,19 @@ if (Test-Path $publish) {
     }
     Remove-Item -LiteralPath $resolvedPublish -Recurse -Force
 }
-& $dotnet publish (Join-Path $projectRoot "src\PalPeek.App\PalPeek.App.csproj") `
-    -c $Configuration `
-    -r win-x64 `
-    --self-contained true `
-    -p:PublishSingleFile=false `
-    -o $publish
+$publishArgs = @(
+    "publish",
+    (Join-Path $projectRoot "src\PalPeek.App\PalPeek.App.csproj"),
+    "-c", $Configuration,
+    "-r", "win-x64",
+    "--self-contained", "true",
+    "-p:PublishSingleFile=false",
+    "-o", $publish
+)
+if ($SkipRestore) {
+    $publishArgs += "--no-restore"
+}
+& $dotnet @publishArgs
 Assert-LastExitCode "dotnet publish"
 
 $runtime = Join-Path $publish "runtime"

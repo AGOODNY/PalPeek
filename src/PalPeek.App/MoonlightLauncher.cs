@@ -2,6 +2,7 @@ using PalPeek.Core;
 using System.Diagnostics;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 
@@ -10,7 +11,11 @@ namespace PalPeek;
 public sealed class MoonlightLauncher
 {
     private const string SettingsFileName = "Moonlight.ini";
+    private const string SettingsOrganizationDirectory =
+        "Moonlight Game Streaming Project";
     private static readonly TimeSpan PairingTimeout = TimeSpan.FromSeconds(45);
+    private static readonly TimeSpan PairingProbeTimeout = TimeSpan.FromSeconds(8);
+    private static readonly TimeSpan PairingPollInterval = TimeSpan.FromMilliseconds(100);
     private readonly PalPeekOptions _options;
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(5) };
     private readonly HttpClient _pairingHttp = new() { Timeout = Timeout.InfiniteTimeSpan };
@@ -23,6 +28,10 @@ public sealed class MoonlightLauncher
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "PalPeek",
         "moonlight-profile");
+    private string SettingsPath => Path.Combine(
+        ProfileDirectory,
+        SettingsOrganizationDirectory,
+        SettingsFileName);
 
     public bool IsInstalled => File.Exists(ExecutablePath);
 
@@ -91,10 +100,19 @@ public sealed class MoonlightLauncher
         string viewerId,
         CancellationToken cancellationToken)
     {
+        PrepareProfileDirectory();
+        var existingCertificate = ReadHostCertificate(host);
+        if (existingCertificate is not null &&
+            await IsHostPairedAsync(host, cancellationToken))
+        {
+            return;
+        }
+
         var pin = MoonlightCommandLine.GeneratePairingPin();
         using var pairing = StartProcess(
             MoonlightCommandLine.Pair(host, pin),
-            redirectOutput: true);
+            redirectOutput: true,
+            hideWindow: true);
         var output = new StringBuilder();
         void Observe(string? line)
         {
@@ -109,63 +127,160 @@ public sealed class MoonlightLauncher
         pairing.BeginOutputReadLine();
         pairing.BeginErrorReadLine();
 
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(PairingTimeout);
+        using var hideCancellation =
+            CancellationTokenSource.CreateLinkedTokenSource(timeout.Token);
+        var hideWindow = HideWindowAsync(pairing, hideCancellation.Token);
         try
         {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(PairingTimeout);
-            using var submitCancellation =
-                CancellationTokenSource.CreateLinkedTokenSource(timeout.Token);
-            var processExit = pairing.WaitForExitAsync(timeout.Token);
-            var submitPin = SubmitPairingPinAsync(
+            await SubmitPairingPinAsync(
                 baseUrl,
                 viewerId,
                 pin,
-                submitCancellation.Token);
-            var completed = await Task.WhenAny(processExit, submitPin);
-
-            if (completed == processExit)
-            {
-                await processExit;
-                pairing.WaitForExit(); // Flush asynchronous output handlers.
-                var earlyOutput = output.ToString();
-                var exitedAlreadyPaired =
-                    earlyOutput.Contains("already paired", StringComparison.OrdinalIgnoreCase);
-                if (pairing.ExitCode == 0 || exitedAlreadyPaired)
-                {
-                    submitCancellation.Cancel();
-                    try { await submitPin; } catch (OperationCanceledException) { }
-                    return;
-                }
-
-                submitCancellation.Cancel();
-                try { await submitPin; } catch (OperationCanceledException) { }
-                throw new InvalidOperationException($"自动配对失败：{earlyOutput.Trim()}");
-            }
-
-            await submitPin;
-            await processExit;
-            pairing.WaitForExit(); // Flush asynchronous output handlers.
-            var text = output.ToString();
-            var alreadyPaired = text.Contains("already paired", StringComparison.OrdinalIgnoreCase);
-            if (pairing.ExitCode != 0 && !alreadyPaired)
-                throw new InvalidOperationException($"自动配对失败：{text.Trim()}");
+                timeout.Token);
+            await WaitForPairingCompletionAsync(
+                host,
+                existingCertificate,
+                pairing,
+                output,
+                timeout.Token);
+            await StopProcessAsync(pairing, CancellationToken.None);
         }
         catch (Exception ex)
         {
-            try
-            {
-                if (!pairing.HasExited)
-                    pairing.Kill(entireProcessTree: true);
-            }
-            catch (InvalidOperationException) { }
+            await StopProcessAsync(pairing, CancellationToken.None);
             if (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested)
             {
                 throw new TimeoutException(
-                    $"自动配对等待超过 {PairingTimeout.TotalSeconds:0} 秒，请确认双方网络稳定后重试。",
+                    $"自动配对等待超过 {PairingTimeout.TotalSeconds:0} 秒。主播端没有确认到对应的 Moonlight 请求，请重试。",
                     ex);
             }
             throw;
         }
+        finally
+        {
+            hideCancellation.Cancel();
+            try { await hideWindow; } catch (OperationCanceledException) { }
+        }
+    }
+
+    private async Task WaitForPairingCompletionAsync(
+        string host,
+        string? existingCertificate,
+        Process pairing,
+        StringBuilder output,
+        CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            var certificate = ReadHostCertificate(host);
+            if (certificate is not null &&
+                (existingCertificate is null ||
+                 !string.Equals(
+                     certificate,
+                     existingCertificate,
+                     StringComparison.Ordinal)))
+            {
+                // Moonlight only persists the server certificate after the complete
+                // cryptographic pairing handshake succeeds.
+                return;
+            }
+
+            // A host reset may keep the same Sunshine certificate while losing its
+            // paired-client database. In that case, validate the new pairing against
+            // the live host instead of waiting for the certificate value to change.
+            if (existingCertificate is not null &&
+                await IsHostPairedAsync(host, cancellationToken))
+            {
+                return;
+            }
+
+            if (pairing.HasExited)
+            {
+                pairing.WaitForExit(); // Flush asynchronous output handlers.
+                var detail = output.ToString().Trim();
+                throw new InvalidOperationException(
+                    string.IsNullOrEmpty(detail)
+                        ? "自动配对失败：Moonlight 在保存配对凭据前退出。"
+                        : $"自动配对失败：{detail}");
+            }
+
+            await Task.Delay(PairingPollInterval, cancellationToken);
+        }
+    }
+
+    private async Task<bool> IsHostPairedAsync(
+        string host,
+        CancellationToken cancellationToken)
+    {
+        using var probe = StartProcess(
+            MoonlightCommandLine.List(host),
+            redirectOutput: true,
+            hideWindow: true);
+        var standardOutput = probe.StandardOutput.ReadToEndAsync();
+        var standardError = probe.StandardError.ReadToEndAsync();
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(PairingProbeTimeout);
+        try
+        {
+            await probe.WaitForExitAsync(timeout.Token);
+            await Task.WhenAll(standardOutput, standardError);
+            return probe.ExitCode == 0;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            await StopProcessAsync(probe, CancellationToken.None);
+            await Task.WhenAll(standardOutput, standardError);
+            return false;
+        }
+        catch (OperationCanceledException)
+        {
+            await StopProcessAsync(probe, CancellationToken.None);
+            await Task.WhenAll(standardOutput, standardError);
+            throw;
+        }
+    }
+
+    private string? ReadHostCertificate(string host)
+    {
+        try
+        {
+            return File.Exists(SettingsPath)
+                ? MoonlightProfile.GetHostCertificate(File.ReadAllText(SettingsPath), host)
+                : null;
+        }
+        catch (IOException)
+        {
+            // QSettings replaces the INI file while flushing. Retry on the next poll.
+            return null;
+        }
+    }
+
+    private static async Task HideWindowAsync(
+        Process process,
+        CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested && !process.HasExited)
+        {
+            process.Refresh();
+            if (process.MainWindowHandle != IntPtr.Zero)
+                ShowWindow(process.MainWindowHandle, ShowWindowCommand.Hide);
+            await Task.Delay(TimeSpan.FromMilliseconds(50), cancellationToken);
+        }
+    }
+
+    private static async Task StopProcessAsync(
+        Process process,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (!process.HasExited)
+                process.Kill(entireProcessTree: true);
+            await process.WaitForExitAsync(cancellationToken);
+        }
+        catch (InvalidOperationException) { }
     }
 
     private async Task SubmitPairingPinAsync(
@@ -187,7 +302,10 @@ public sealed class MoonlightLauncher
             MoonlightCommandLine.Stream(host, _options.Quality),
             redirectOutput: false);
 
-    private Process StartProcess(IEnumerable<string> arguments, bool redirectOutput)
+    private Process StartProcess(
+        IEnumerable<string> arguments,
+        bool redirectOutput,
+        bool hideWindow = false)
     {
         PrepareProfileDirectory();
         var startInfo = new ProcessStartInfo
@@ -197,13 +315,25 @@ public sealed class MoonlightLauncher
             UseShellExecute = false,
             RedirectStandardOutput = redirectOutput,
             RedirectStandardError = redirectOutput,
-            CreateNoWindow = redirectOutput
+            CreateNoWindow = redirectOutput || hideWindow,
+            WindowStyle = hideWindow
+                ? ProcessWindowStyle.Hidden
+                : ProcessWindowStyle.Normal
         };
         foreach (var argument in arguments)
             startInfo.ArgumentList.Add(argument);
 
         var process = Process.Start(startInfo);
         return process ?? throw new InvalidOperationException("无法启动 Moonlight。");
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ShowWindow(IntPtr windowHandle, ShowWindowCommand command);
+
+    private enum ShowWindowCommand
+    {
+        Hide = 0
     }
 
     private void PrepareProfileDirectory()
@@ -219,10 +349,24 @@ public sealed class MoonlightLauncher
         // Older PalPeek builds asked portable Moonlight to store its state beside
         // moonlight.exe. Preserve any pairing created by an elevated installer run,
         // then keep all future state in the per-user writable profile.
-        var legacySettings = Path.Combine(packagedDirectory, SettingsFileName);
-        var profileSettings = Path.Combine(ProfileDirectory, SettingsFileName);
-        if (File.Exists(legacySettings) && !File.Exists(profileSettings))
-            File.Copy(legacySettings, profileSettings);
+        var legacySettingsCandidates = new[]
+        {
+            Path.Combine(
+                packagedDirectory,
+                SettingsOrganizationDirectory,
+                SettingsFileName),
+            Path.Combine(packagedDirectory, SettingsFileName),
+            Path.Combine(ProfileDirectory, SettingsFileName)
+        };
+        if (!File.Exists(SettingsPath))
+        {
+            var legacySettings = legacySettingsCandidates.FirstOrDefault(File.Exists);
+            if (legacySettings is not null)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
+                File.Copy(legacySettings, SettingsPath);
+            }
+        }
     }
 
     private async Task HeartbeatAsync(string baseUrl, string leaseId, CancellationToken cancellationToken)

@@ -18,6 +18,8 @@ public static class MoonlightCommandLine
         return ["pair", host, "--pin", pin];
     }
 
+    public static IReadOnlyList<string> List(string host) => ["list", host];
+
     public static IReadOnlyList<string> Stream(string host, StreamQuality quality)
     {
         var resolution = quality == StreamQuality.P1080_60 ? "1920x1080" : "1280x720";

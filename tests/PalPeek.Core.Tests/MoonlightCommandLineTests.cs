@@ -37,6 +37,12 @@ public sealed class MoonlightCommandLineTests
     }
 
     [Fact]
+    public void ListTargetsTheRequestedHost()
+    {
+        Assert.Equal(["list", "100.64.0.2"], MoonlightCommandLine.List("100.64.0.2"));
+    }
+
+    [Fact]
     public void StreamUsesMoonlightSixCompatibleOptions()
     {
         var arguments = MoonlightCommandLine.Stream("100.64.0.2", StreamQuality.P720_60);

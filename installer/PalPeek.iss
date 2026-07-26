@@ -1,5 +1,5 @@
 #define MyAppName "PalPeek"
-#define MyAppVersion "0.1.3"
+#define MyAppVersion "0.1.4"
 #define MyAppPublisher "PalPeek 开源项目"
 #define MyAppExeName "PalPeek.exe"
 
