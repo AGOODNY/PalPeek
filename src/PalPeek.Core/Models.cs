@@ -56,7 +56,7 @@ public sealed record HostStatus(
 
 public static class BuildInfo
 {
-    public const string Version = "0.1.4";
+    public const string Version = "0.1.5";
 }
 
 public sealed record PairRequest(int SchemaVersion, string ClientId, string Pin);

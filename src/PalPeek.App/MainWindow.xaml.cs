@@ -21,7 +21,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private HostStatus? _latestHostStatus;
     private string _bannerText = string.Empty;
     private Visibility _bannerVisibility = Visibility.Collapsed;
-    private bool _watching;
+    private CancellationTokenSource? _watchCancellation;
+    private Task? _watchTask;
+    private FriendStream? _activeWatch;
+    private bool _watchTransitioning;
 
     public MainWindow(
         FriendDiscovery discovery,
@@ -44,6 +47,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         Loaded += async (_, _) => await RefreshNetworkAsync();
         Closed += (_, _) =>
         {
+            _watchCancellation?.Cancel();
             _discovery.Changed -= Discovery_Changed;
             _discovery.ProbeFailed -= Discovery_ProbeFailed;
             _hostState.Changed -= HostState_Changed;
@@ -107,7 +111,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private void Discovery_Changed(object? sender, IReadOnlyList<FriendStream> streams) =>
         Dispatcher.Invoke(() =>
         {
-            var cards = streams.Select(x => new FriendCard(x)).ToArray();
+            var cards = streams.Select(x => new FriendCard(x, IsActiveWatch(x))).ToArray();
             Friends.Clear();
             foreach (var card in cards)
                 Friends.Add(card);
@@ -163,28 +167,93 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private async void WatchButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_watching || sender is not System.Windows.Controls.Button { Tag: FriendCard card })
+        if (_watchTransitioning ||
+            sender is not System.Windows.Controls.Button { Tag: FriendCard card })
             return;
-        await WatchAsync(card.Stream);
+        await RestartWatchAsync(card.Stream);
     }
 
     private void UninstallButton_Click(object sender, RoutedEventArgs e) =>
         UninstallRequested?.Invoke(this, EventArgs.Empty);
 
-    private async Task WatchAsync(FriendStream stream)
+    private async Task RestartWatchAsync(FriendStream stream)
     {
-        _watching = true;
+        if (_watchTransitioning)
+            return;
+
+        _watchTransitioning = true;
+        try
+        {
+            await StopWatchAsync();
+            StartWatch(stream);
+        }
+        finally
+        {
+            _watchTransitioning = false;
+        }
+    }
+
+    private void StartWatch(FriendStream stream)
+    {
+        var cancellation = new CancellationTokenSource();
+        _watchCancellation = cancellation;
+        _activeWatch = stream;
+        var task = RunWatchAsync(stream, cancellation.Token);
+        _watchTask = task;
+        _ = ObserveWatchCompletionAsync(task, cancellation);
+    }
+
+    private async Task StopWatchAsync()
+    {
+        var cancellation = _watchCancellation;
+        var task = _watchTask;
+        if (cancellation is null || task is null)
+            return;
+
+        cancellation.Cancel();
+        await task;
+        ClearWatch(task, cancellation);
+    }
+
+    private async Task RunWatchAsync(FriendStream stream, CancellationToken cancellationToken)
+    {
         try
         {
             HideBanner();
-            await _moonlight.WatchAsync(stream);
+            await _moonlight.WatchAsync(stream, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
         }
         catch (Exception ex)
         {
             ShowBanner(ex.Message);
         }
-        finally { _watching = false; }
     }
+
+    private async Task ObserveWatchCompletionAsync(
+        Task task,
+        CancellationTokenSource cancellation)
+    {
+        await task;
+        ClearWatch(task, cancellation);
+    }
+
+    private void ClearWatch(Task task, CancellationTokenSource cancellation)
+    {
+        if (!ReferenceEquals(_watchTask, task))
+            return;
+
+        _watchTask = null;
+        _watchCancellation = null;
+        _activeWatch = null;
+        cancellation.Dispose();
+    }
+
+    private bool IsActiveWatch(FriendStream stream) =>
+        _activeWatch is { } active &&
+        active.Node.Id.Equals(stream.Node.Id, StringComparison.OrdinalIgnoreCase) &&
+        active.Status.Game?.SessionId == stream.Status.Game?.SessionId;
 
     public async Task OpenWatchUriAsync(string uriText)
     {
@@ -205,7 +274,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 x.Status.Game?.SessionId == session);
             if (match is not null)
             {
-                await WatchAsync(match);
+                await RestartWatchAsync(match);
                 return;
             }
             await Task.Delay(750);
@@ -236,18 +305,25 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
 public sealed class FriendCard
 {
-    public FriendCard(FriendStream stream) => Stream = stream;
+    private readonly bool _canResume;
+
+    public FriendCard(FriendStream stream, bool canResume = false)
+    {
+        Stream = stream;
+        _canResume = canResume;
+    }
+
     public FriendStream Stream { get; }
     public string Nickname => Stream.Status.Nickname;
     public string GameName => Stream.Status.Game?.Name ?? "游戏已结束";
-    public string WatchButtonText => $"观看 {GameName}";
+    public string WatchButtonText => _canResume ? $"重新进入 {GameName}" : $"观看 {GameName}";
     public string Detail =>
         $"在线 · {QualityText(Stream.Status.Quality)} · {Stream.Status.ViewerCount}/{Protocol.MaxViewers} 人观看 · " +
         $"{Stream.Node.HostName} · v{Stream.Status.Version}" +
         (Stream.Status.CanWatch || string.IsNullOrWhiteSpace(Stream.Status.Message)
             ? string.Empty
             : $" · 准备中：{Stream.Status.Message}");
-    public bool CanWatch => Stream.Status.CanWatch;
+    public bool CanWatch => Stream.Status.CanWatch || _canResume;
 
     private static string QualityText(StreamQuality quality) =>
         quality == StreamQuality.P1080_60 ? "1080p60" : "720p60";
