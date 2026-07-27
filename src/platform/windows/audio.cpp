@@ -241,7 +241,13 @@ namespace platf::audio {
       if (!object) {
         return E_POINTER;
       }
-      if (iid == IID_IUnknown || iid == __uuidof(IActivateAudioInterfaceCompletionHandler)) {
+      if (iid == IID_IUnknown ||
+          iid == __uuidof(IActivateAudioInterfaceCompletionHandler) ||
+          iid == IID_IAgileObject) {
+        // ActivateAudioInterfaceAsync completes on a system MTA thread. The
+        // handler only publishes its result through a Windows event, so it is
+        // safe to expose the IAgileObject marker just like the FtmBase used by
+        // Microsoft's application-loopback sample.
         *object = static_cast<IActivateAudioInterfaceCompletionHandler *>(this);
         AddRef();
         return S_OK;
@@ -280,13 +286,17 @@ namespace platf::audio {
 
   class co_init_t: public deinit_t {
   public:
-    co_init_t() {
-      CoInitializeEx(nullptr, COINIT_MULTITHREADED | COINIT_SPEED_OVER_MEMORY);
+    co_init_t():
+        status(CoInitializeEx(nullptr, COINIT_MULTITHREADED | COINIT_SPEED_OVER_MEMORY)) {
     }
 
     ~co_init_t() override {
-      CoUninitialize();
+      if (SUCCEEDED(status)) {
+        CoUninitialize();
+      }
     }
+
+    HRESULT status;
   };
 
   class prop_var_t {
@@ -577,6 +587,20 @@ namespace platf::audio {
     }
 
     int init(std::uint32_t sample_rate, std::uint32_t frame_size, std::uint32_t channels_out, bool continuous) {
+      // audio::capture runs on a dedicated session thread. COM apartments are
+      // per-thread, so the initialization done by platf::init() on Sunshine's
+      // main thread does not cover process-loopback activation here.
+      if (FAILED(com_init.status) && com_init.status != RPC_E_CHANGED_MODE) {
+        palpeek::set_audio_state(
+          palpeek::audio_state_t::error,
+          "process_audio_init_failed",
+          "Windows could not initialize COM for process audio capture"
+        );
+        BOOST_LOG(error) << "Couldn't initialize COM for process audio capture [0x"
+                         << util::hex(com_init.status).to_string_view() << ']';
+        return -1;
+      }
+
       audio_event.reset(CreateEventA(nullptr, FALSE, FALSE, nullptr));
       if (!audio_event) {
         BOOST_LOG(error) << "Couldn't create Event handle"sv;
@@ -713,6 +737,8 @@ namespace platf::audio {
     }
 
   private:
+    co_init_t com_init;
+
     capture_e _fill_buffer() {
       HRESULT status;
 
