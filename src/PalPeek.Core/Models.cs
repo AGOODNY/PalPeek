@@ -56,7 +56,7 @@ public sealed record HostStatus(
 
 public static class BuildInfo
 {
-    public const string Version = "0.1.5";
+    public const string Version = "0.2.0";
 }
 
 public sealed record PairRequest(int SchemaVersion, string ClientId, string Pin);
@@ -86,5 +86,7 @@ public sealed class PalPeekOptions
     public string Nickname { get; set; } = Environment.UserName;
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public StreamQuality Quality { get; set; } = StreamQuality.P720_60;
+    public bool Invisible { get; set; }
+    public HashSet<uint> BlockedGameAppIds { get; set; } = [];
     public bool StartWithWindows { get; set; } = true;
 }

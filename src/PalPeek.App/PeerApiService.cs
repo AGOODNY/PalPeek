@@ -18,6 +18,7 @@ public sealed class PeerApiService : BackgroundService
     private readonly SunshineBridge _sunshine;
     private readonly EventHub _events;
     private readonly PalPeekOptions _options;
+    private readonly SharingControl _sharing;
     private WebApplication? _app;
 
     public PeerApiService(
@@ -26,7 +27,8 @@ public sealed class PeerApiService : BackgroundService
         LeaseManager leases,
         SunshineBridge sunshine,
         EventHub events,
-        PalPeekOptions options)
+        PalPeekOptions options,
+        SharingControl sharing)
     {
         _tailscale = tailscale;
         _state = state;
@@ -34,6 +36,7 @@ public sealed class PeerApiService : BackgroundService
         _sunshine = sunshine;
         _events = events;
         _options = options;
+        _sharing = sharing;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -73,7 +76,7 @@ public sealed class PeerApiService : BackgroundService
             await next();
         });
 
-        _app.MapGet("/api/v1/status", () => Results.Ok(_state.Get()));
+        _app.MapGet("/api/v1/status", () => Results.Ok(GetPublicStatus()));
         _app.MapPost("/api/v1/pair", async (
             HttpContext context,
             PairRequest request,
@@ -112,7 +115,7 @@ public sealed class PeerApiService : BackgroundService
         });
         _app.MapPost("/api/v1/reservations", (ReservationRequest request) =>
         {
-            var status = _state.Get();
+            var status = GetPublicStatus();
             if (request.SchemaVersion != Protocol.SchemaVersion ||
                 status.Game is null || status.Game.SessionId != request.SessionId ||
                 status.CaptureState != CaptureState.Ready)
@@ -194,5 +197,20 @@ public sealed class PeerApiService : BackgroundService
         return new(Protocol.SchemaVersion, Guid.NewGuid().ToString("N"), type,
             DateTimeOffset.UtcNow, _options.Nickname, sessionId, game, viewer,
             game is null ? null : $"palpeek://watch/{Environment.MachineName}/{game.SessionId}");
+    }
+
+    private HostStatus GetPublicStatus()
+    {
+        var status = _state.Get();
+        return _sharing.Get().SharingEnabled
+            ? status
+            : status with
+            {
+                Game = null,
+                CaptureState = CaptureState.Idle,
+                ViewerCount = 0,
+                CanWatch = false,
+                Message = null
+            };
     }
 }

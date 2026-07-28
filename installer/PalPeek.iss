@@ -1,5 +1,5 @@
 #define MyAppName "PalPeek"
-#define MyAppVersion "0.1.5"
+#define MyAppVersion "0.2.0"
 #define MyAppPublisher "PalPeek 开源项目"
 #define MyAppExeName "PalPeek.exe"
 
@@ -48,7 +48,8 @@ Root: HKLM; Subkey: "Software\Classes\palpeek"; ValueType: string; ValueData: "U
 Root: HKLM; Subkey: "Software\Classes\palpeek"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
 Root: HKLM; Subkey: "Software\Classes\palpeek\DefaultIcon"; ValueType: string; ValueData: """{app}\{#MyAppExeName}"",0"
 Root: HKLM; Subkey: "Software\Classes\palpeek\shell\open\command"; ValueType: string; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
-Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "PalPeek"; ValueData: """{app}\{#MyAppExeName}"" --background"; Flags: uninsdeletevalue
+Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "PalPeek"; Flags: deletevalue
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "PalPeek"; ValueData: """{app}\{#MyAppExeName}"" --background"; Flags: uninsdeletevalue
 
 [Run]
 Filename: "{cmd}"; Parameters: "/c netsh advfirewall firewall add rule name=""PalPeek Tailnet API"" dir=in action=allow program=""{app}\{#MyAppExeName}"" protocol=TCP localport=48191 remoteip=100.64.0.0/10,fd7a:115c:a1e0::/48 profile=any"; Flags: runhidden; StatusMsg: "正在配置 PalPeek 防火墙规则…"

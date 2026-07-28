@@ -1,0 +1,21 @@
+<Window x:Class="PalPeek.FaqWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="PalPeek 常见问题" Width="620" Height="480" MinWidth="500" MinHeight="360"
+        Icon="pack://application:,,,/PalPeek;component/Assets/palpeek.ico"
+        Background="{StaticResource BackgroundBrush}" Foreground="#F4F6FA"
+        WindowStartupLocation="CenterOwner">
+    <Grid Margin="28">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <TextBlock Text="常见问题" FontSize="28" FontWeight="Bold" Margin="0,0,0,16"/>
+        <RichTextBox x:Name="DocumentView" Grid.Row="1" IsReadOnly="True"
+                     Background="{StaticResource CardBrush}" Foreground="#F4F6FA"
+                     BorderThickness="0" Padding="18" VerticalScrollBarVisibility="Auto"/>
+        <Button Grid.Row="2" Content="关闭" Click="CloseButton_Click"
+                HorizontalAlignment="Right" Margin="0,16,0,0"/>
+    </Grid>
+</Window>

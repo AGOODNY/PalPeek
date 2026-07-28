@@ -42,6 +42,8 @@ public partial class App : System.Windows.Application
                 services.AddSingleton<EventHub>();
                 services.AddSingleton<HostStateStore>();
                 services.AddSingleton<SharingControl>();
+                services.AddSingleton<StartupManager>();
+                services.AddSingleton<SettingsWindowFactory>();
                 services.AddSingleton<SunshineBridge>();
                 services.AddHostedService(
                     sp => sp.GetRequiredService<SunshineBridge>());
@@ -56,6 +58,18 @@ public partial class App : System.Windows.Application
                 services.AddSingleton<MainWindow>();
             })
             .Build();
+
+        try
+        {
+            var options = _host.Services.GetRequiredService<PalPeekOptions>();
+            _host.Services.GetRequiredService<StartupManager>()
+                .SetEnabled(options.StartWithWindows);
+        }
+        catch
+        {
+            // The settings page reports registry errors when the user changes this
+            // option. Startup itself should remain usable if Windows blocks the key.
+        }
 
         try
         {
@@ -76,8 +90,8 @@ public partial class App : System.Windows.Application
                 window,
                 _host.Services.GetRequiredService<HostStateStore>(),
                 ShutdownApplication,
+                window.OpenSettings,
                 RequestUninstall);
-            window.UninstallRequested += (_, _) => RequestUninstall();
             _singleInstance.StartListening(async command =>
             {
                 if (command.Equals("--shutdown-for-update", StringComparison.OrdinalIgnoreCase))

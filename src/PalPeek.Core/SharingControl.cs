@@ -3,13 +3,26 @@ namespace PalPeek.Core;
 public sealed record SharingSnapshot(
     GameInfo? DetectedGame,
     bool SharingEnabled,
-    string? DetectionMessage);
+    string? DetectionMessage,
+    SharingBlockReason BlockReason = SharingBlockReason.None);
+
+public enum SharingBlockReason
+{
+    None,
+    ManuallyStopped,
+    Invisible,
+    GameDisabled
+}
 
 public sealed class SharingControl
 {
     private readonly object _gate = new();
+    private readonly PalPeekOptions _options;
     private SharingSnapshot _snapshot = new(null, false, null);
     private string? _stoppedSessionId;
+
+    public SharingControl(PalPeekOptions? options = null) =>
+        _options = options ?? new PalPeekOptions();
 
     public event EventHandler<SharingSnapshot>? Changed;
 
@@ -29,8 +42,7 @@ public sealed class SharingControl
             else if (_snapshot.DetectedGame?.SessionId != game.SessionId)
                 _stoppedSessionId = null;
 
-            var sharingEnabled = game is not null && game.SessionId != _stoppedSessionId;
-            next = new SharingSnapshot(game, sharingEnabled, message);
+            next = CreateSnapshot(game, message);
             if (next == _snapshot)
                 return;
             _snapshot = next;
@@ -45,8 +57,13 @@ public sealed class SharingControl
         {
             if (_snapshot.DetectedGame is null)
                 return false;
+            if (_options.Invisible ||
+                _options.BlockedGameAppIds.Contains(_snapshot.DetectedGame.AppId))
+                return false;
             _stoppedSessionId = null;
-            next = _snapshot with { SharingEnabled = true };
+            next = CreateSnapshot(
+                _snapshot.DetectedGame,
+                _snapshot.DetectionMessage);
             if (next == _snapshot)
                 return true;
             _snapshot = next;
@@ -61,11 +78,46 @@ public sealed class SharingControl
         lock (_gate)
         {
             _stoppedSessionId = _snapshot.DetectedGame?.SessionId;
-            next = _snapshot with { SharingEnabled = false };
+            next = CreateSnapshot(
+                _snapshot.DetectedGame,
+                _snapshot.DetectionMessage);
             if (next == _snapshot)
                 return;
             _snapshot = next;
         }
         Changed?.Invoke(this, next);
+    }
+
+    public void RefreshPolicy()
+    {
+        SharingSnapshot next;
+        lock (_gate)
+        {
+            next = CreateSnapshot(
+                _snapshot.DetectedGame,
+                _snapshot.DetectionMessage);
+            if (next == _snapshot)
+                return;
+            _snapshot = next;
+        }
+        Changed?.Invoke(this, next);
+    }
+
+    private SharingSnapshot CreateSnapshot(GameInfo? game, string? message)
+    {
+        var reason = game is null
+            ? SharingBlockReason.None
+            : _options.Invisible
+                ? SharingBlockReason.Invisible
+                : _options.BlockedGameAppIds.Contains(game.AppId)
+                    ? SharingBlockReason.GameDisabled
+                    : game.SessionId == _stoppedSessionId
+                        ? SharingBlockReason.ManuallyStopped
+                        : SharingBlockReason.None;
+        return new SharingSnapshot(
+            game,
+            game is not null && reason == SharingBlockReason.None,
+            message,
+            reason);
     }
 }

@@ -59,4 +59,46 @@ public sealed class SharingControlTests
         Assert.True(control.StartSharing());
         Assert.True(control.Get().SharingEnabled);
     }
+
+    [Fact]
+    public void InvisibleModeImmediatelySuppressesTheCurrentGame()
+    {
+        var options = new PalPeekOptions();
+        var control = new SharingControl(options);
+        control.UpdateDetection(Game(), null);
+
+        options.Invisible = true;
+        control.RefreshPolicy();
+
+        Assert.False(control.Get().SharingEnabled);
+        Assert.Equal(SharingBlockReason.Invisible, control.Get().BlockReason);
+        Assert.False(control.StartSharing());
+    }
+
+    [Fact]
+    public void ABlockedGameStaysSuppressedAcrossSessions()
+    {
+        var options = new PalPeekOptions { BlockedGameAppIds = [10] };
+        var control = new SharingControl(options);
+
+        control.UpdateDetection(Game(), null);
+        control.UpdateDetection(Game("session-2"), null);
+
+        Assert.False(control.Get().SharingEnabled);
+        Assert.Equal(SharingBlockReason.GameDisabled, control.Get().BlockReason);
+    }
+
+    [Fact]
+    public void RemovingAGameBlockRestoresSharing()
+    {
+        var options = new PalPeekOptions { BlockedGameAppIds = [10] };
+        var control = new SharingControl(options);
+        control.UpdateDetection(Game(), null);
+
+        options.BlockedGameAppIds.Clear();
+        control.RefreshPolicy();
+
+        Assert.True(control.Get().SharingEnabled);
+        Assert.Equal(SharingBlockReason.None, control.Get().BlockReason);
+    }
 }

@@ -14,24 +14,30 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private readonly ITailscaleService _tailscale;
     private readonly HostStateStore _hostState;
     private readonly SharingControl _sharing;
+    private readonly SettingsWindowFactory _settingsFactory;
     private string _networkStatus = "正在检查 Tailscale…";
+    private bool _isNetworkLoading = true;
     private string _localStatus = "没有运行中的游戏";
     private string _shareButtonText = "等待游戏";
     private bool _canToggleShare;
+    private bool _isShareLoading;
     private HostStatus? _latestHostStatus;
     private string _bannerText = string.Empty;
     private Visibility _bannerVisibility = Visibility.Collapsed;
     private CancellationTokenSource? _watchCancellation;
     private Task? _watchTask;
     private FriendStream? _activeWatch;
+    private WatchStage? _watchStage;
     private bool _watchTransitioning;
+    private SettingsWindow? _settingsWindow;
 
     public MainWindow(
         FriendDiscovery discovery,
         MoonlightLauncher moonlight,
         ITailscaleService tailscale,
         HostStateStore hostState,
-        SharingControl sharing)
+        SharingControl sharing,
+        SettingsWindowFactory settingsFactory)
     {
         InitializeComponent();
         DataContext = this;
@@ -40,6 +46,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         _tailscale = tailscale;
         _hostState = hostState;
         _sharing = sharing;
+        _settingsFactory = settingsFactory;
         _discovery.Changed += Discovery_Changed;
         _discovery.ProbeFailed += Discovery_ProbeFailed;
         _hostState.Changed += HostState_Changed;
@@ -65,6 +72,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         private set => Set(ref _networkStatus, value);
     }
 
+    public bool IsNetworkLoading
+    {
+        get => _isNetworkLoading;
+        private set => Set(ref _isNetworkLoading, value);
+    }
+
     public string LocalStatus
     {
         get => _localStatus;
@@ -83,6 +96,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         private set => Set(ref _canToggleShare, value);
     }
 
+    public bool IsShareLoading
+    {
+        get => _isShareLoading;
+        private set => Set(ref _isShareLoading, value);
+    }
+
     public string BannerText
     {
         get => _bannerText;
@@ -96,26 +115,29 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
-    public event EventHandler? UninstallRequested;
 
     private async Task RefreshNetworkAsync()
     {
-        var snapshot = await _tailscale.GetSnapshotAsync();
-        NetworkStatus = snapshot.Running
-            ? $"Tailscale 已连接 · {snapshot.SelfIp}"
-            : snapshot.Error ?? "Tailscale 未连接";
-        if (!snapshot.Running)
-            ShowBanner(snapshot.Error ?? "请安装并连接 Tailscale。");
+        IsNetworkLoading = true;
+        try
+        {
+            var snapshot = await _tailscale.GetSnapshotAsync();
+            NetworkStatus = snapshot.Running
+                ? $"Tailscale 已连接 · {snapshot.SelfIp}"
+                : snapshot.Error ?? "Tailscale 未连接";
+            if (!snapshot.Running)
+                ShowBanner(snapshot.Error ?? "请安装并连接 Tailscale。");
+        }
+        finally
+        {
+            IsNetworkLoading = false;
+        }
     }
 
     private void Discovery_Changed(object? sender, IReadOnlyList<FriendStream> streams) =>
         Dispatcher.Invoke(() =>
         {
-            var cards = streams.Select(x => new FriendCard(x, IsActiveWatch(x))).ToArray();
-            Friends.Clear();
-            foreach (var card in cards)
-                Friends.Add(card);
-            OnPropertyChanged(nameof(EmptyVisibility));
+            RefreshFriendCards(streams);
         });
 
     private void Discovery_ProbeFailed(object? sender, FriendDiscoveryError error) =>
@@ -138,13 +160,28 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         ShareButtonText = snapshot.DetectedGame is null
             ? "等待游戏"
-            : snapshot.SharingEnabled ? "停止分享" : "恢复分享";
-        CanToggleShare = snapshot.DetectedGame is not null;
+            : snapshot.BlockReason switch
+            {
+                SharingBlockReason.Invisible => "隐身中",
+                SharingBlockReason.GameDisabled => "已禁用此游戏",
+                SharingBlockReason.ManuallyStopped => "恢复分享",
+                _ => "停止分享"
+            };
+        CanToggleShare = snapshot.DetectedGame is not null &&
+                         snapshot.BlockReason is SharingBlockReason.None or
+                             SharingBlockReason.ManuallyStopped;
         LocalStatus = snapshot.DetectedGame is null
             ? "没有运行中的游戏"
-            : snapshot.SharingEnabled
-                ? $"正在分享 {snapshot.DetectedGame.Name} · {_latestHostStatus?.ViewerCount ?? 0}/{Protocol.MaxViewers} 人观看"
-                : $"已停止分享 {snapshot.DetectedGame.Name}";
+            : snapshot.BlockReason switch
+            {
+                SharingBlockReason.Invisible => $"隐身中 · {snapshot.DetectedGame.Name} 不会显示给好友",
+                SharingBlockReason.GameDisabled => $"已始终禁止共享 {snapshot.DetectedGame.Name}",
+                SharingBlockReason.ManuallyStopped => $"已停止分享 {snapshot.DetectedGame.Name}",
+                _ => $"正在分享 {snapshot.DetectedGame.Name} · {_latestHostStatus?.ViewerCount ?? 0}/{Protocol.MaxViewers} 人观看"
+            };
+        IsShareLoading = snapshot.SharingEnabled &&
+                         (_latestHostStatus?.Game?.SessionId != snapshot.DetectedGame?.SessionId ||
+                          _latestHostStatus?.CaptureState == CaptureState.Stabilizing);
     }
 
     private void ShareButton_Click(object sender, RoutedEventArgs e)
@@ -173,8 +210,21 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         await RestartWatchAsync(card.Stream);
     }
 
-    private void UninstallButton_Click(object sender, RoutedEventArgs e) =>
-        UninstallRequested?.Invoke(this, EventArgs.Empty);
+    private void SettingsButton_Click(object sender, RoutedEventArgs e) => OpenSettings();
+
+    public void OpenSettings()
+    {
+        if (_settingsWindow is { IsVisible: true })
+        {
+            _settingsWindow.Activate();
+            return;
+        }
+
+        _settingsWindow = _settingsFactory.Create();
+        _settingsWindow.Owner = this;
+        _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+        _settingsWindow.Show();
+    }
 
     private async Task RestartWatchAsync(FriendStream stream)
     {
@@ -198,6 +248,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         var cancellation = new CancellationTokenSource();
         _watchCancellation = cancellation;
         _activeWatch = stream;
+        _watchStage = WatchStage.Reserving;
+        RefreshFriendCards(_discovery.Current);
         var task = RunWatchAsync(stream, cancellation.Token);
         _watchTask = task;
         _ = ObserveWatchCompletionAsync(task, cancellation);
@@ -220,7 +272,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         try
         {
             HideBanner();
-            await _moonlight.WatchAsync(stream, cancellationToken);
+            var progress = new Progress<WatchProgress>(
+                update => WatchProgress_Changed(stream, update));
+            await _moonlight.WatchAsync(stream, progress, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -247,13 +301,46 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         _watchTask = null;
         _watchCancellation = null;
         _activeWatch = null;
+        _watchStage = null;
         cancellation.Dispose();
+        RefreshFriendCards(_discovery.Current);
     }
 
     private bool IsActiveWatch(FriendStream stream) =>
         _activeWatch is { } active &&
-        active.Node.Id.Equals(stream.Node.Id, StringComparison.OrdinalIgnoreCase) &&
-        active.Status.Game?.SessionId == stream.Status.Game?.SessionId;
+        IsSameStream(active, stream);
+
+    private bool IsConnectingWatch(FriendStream stream) =>
+        IsActiveWatch(stream) && _watchStage is not null and not WatchStage.Streaming;
+
+    private void WatchProgress_Changed(FriendStream stream, WatchProgress progress)
+    {
+        if (_activeWatch is null || !IsSameStream(_activeWatch, stream))
+            return;
+        _watchStage = progress.Stage;
+        ShowBanner(progress.Stage == WatchStage.Streaming
+            ? "播放器已启动。关闭播放器即可结束观看。"
+            : progress.Message);
+        RefreshFriendCards(_discovery.Current);
+    }
+
+    private void RefreshFriendCards(IReadOnlyList<FriendStream> streams)
+    {
+        var cards = streams
+            .Select(stream => new FriendCard(
+                stream,
+                IsActiveWatch(stream),
+                IsConnectingWatch(stream)))
+            .ToArray();
+        Friends.Clear();
+        foreach (var card in cards)
+            Friends.Add(card);
+        OnPropertyChanged(nameof(EmptyVisibility));
+    }
+
+    private static bool IsSameStream(FriendStream left, FriendStream right) =>
+        left.Node.Id.Equals(right.Node.Id, StringComparison.OrdinalIgnoreCase) &&
+        left.Status.Game?.SessionId == right.Status.Game?.SessionId;
 
     public async Task OpenWatchUriAsync(string uriText)
     {
@@ -305,25 +392,34 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
 public sealed class FriendCard
 {
-    private readonly bool _canResume;
+    private readonly bool _isActive;
 
-    public FriendCard(FriendStream stream, bool canResume = false)
+    public FriendCard(
+        FriendStream stream,
+        bool isActive = false,
+        bool isConnecting = false)
     {
         Stream = stream;
-        _canResume = canResume;
+        _isActive = isActive;
+        IsConnecting = isConnecting;
     }
 
     public FriendStream Stream { get; }
     public string Nickname => Stream.Status.Nickname;
     public string GameName => Stream.Status.Game?.Name ?? "游戏已结束";
-    public string WatchButtonText => _canResume ? $"重新进入 {GameName}" : $"观看 {GameName}";
+    public string WatchButtonText => IsConnecting
+        ? "正在连接，请勿反复点击"
+        : _isActive
+            ? "正在观看，请勿反复点击"
+            : $"观看 {GameName}";
     public string Detail =>
         $"在线 · {QualityText(Stream.Status.Quality)} · {Stream.Status.ViewerCount}/{Protocol.MaxViewers} 人观看 · " +
         $"{Stream.Node.HostName} · v{Stream.Status.Version}" +
         (Stream.Status.CanWatch || string.IsNullOrWhiteSpace(Stream.Status.Message)
             ? string.Empty
             : $" · 准备中：{Stream.Status.Message}");
-    public bool CanWatch => Stream.Status.CanWatch || _canResume;
+    public bool CanWatch => Stream.Status.CanWatch && !_isActive;
+    public bool IsConnecting { get; }
 
     private static string QualityText(StreamQuality quality) =>
         quality == StreamQuality.P1080_60 ? "1080p60" : "720p60";

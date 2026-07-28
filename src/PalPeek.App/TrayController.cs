@@ -10,12 +10,19 @@ public sealed class TrayController : IDisposable
     private readonly Forms.NotifyIcon _icon;
     private readonly MainWindow _window;
     private readonly Action _exit;
+    private readonly Action _settings;
     private readonly Action _uninstall;
 
-    public TrayController(MainWindow window, HostStateStore state, Action exit, Action uninstall)
+    public TrayController(
+        MainWindow window,
+        HostStateStore state,
+        Action exit,
+        Action settings,
+        Action uninstall)
     {
         _window = window;
         _exit = exit;
+        _settings = settings;
         _uninstall = uninstall;
         _icon = new Forms.NotifyIcon
         {
@@ -54,6 +61,11 @@ public sealed class TrayController : IDisposable
     {
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("打开 PalPeek", null, (_, _) => ShowWindow());
+        menu.Items.Add("设置…", null, (_, _) =>
+        {
+            ShowWindow();
+            _settings();
+        });
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("卸载 PalPeek…", null, (_, _) => _uninstall());
         menu.Items.Add("退出", null, (_, _) => _exit());

@@ -20,8 +20,13 @@ public sealed class ConfigStore
         try
         {
             if (File.Exists(_path))
-                return JsonSerializer.Deserialize<PalPeekOptions>(File.ReadAllText(_path), JsonOptions)
-                       ?? new PalPeekOptions();
+            {
+                var loaded =
+                    JsonSerializer.Deserialize<PalPeekOptions>(File.ReadAllText(_path), JsonOptions)
+                    ?? new PalPeekOptions();
+                loaded.BlockedGameAppIds ??= [];
+                return loaded;
+            }
         }
         catch (Exception ex) when (ex is IOException or JsonException) { }
         var options = new PalPeekOptions();

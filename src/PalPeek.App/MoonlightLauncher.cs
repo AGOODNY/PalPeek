@@ -35,13 +35,17 @@ public sealed class MoonlightLauncher
 
     public bool IsInstalled => File.Exists(ExecutablePath);
 
-    public async Task WatchAsync(FriendStream friend, CancellationToken cancellationToken = default)
+    public async Task WatchAsync(
+        FriendStream friend,
+        IProgress<WatchProgress>? progress = null,
+        CancellationToken cancellationToken = default)
     {
         if (!IsInstalled)
             throw new FileNotFoundException("未找到内置 Moonlight 播放组件。", ExecutablePath);
         if (friend.Status.Game is null)
             throw new InvalidOperationException("好友的观战会话已经结束。");
 
+        progress?.Report(new WatchProgress(WatchStage.Reserving, "正在申请观看名额…"));
         var baseUrl = $"http://{friend.Node.Ip}:{Protocol.ApiPort}";
         var viewerId = Environment.MachineName;
         using var reserve = await _http.PostAsJsonAsync(
@@ -57,8 +61,11 @@ public sealed class MoonlightLauncher
 
         try
         {
+            progress?.Report(new WatchProgress(WatchStage.Pairing, "正在连接主播并检查配对…"));
             await EnsurePairedAsync(friend.Node.Ip, baseUrl, viewerId, cancellationToken);
+            progress?.Report(new WatchProgress(WatchStage.StartingPlayer, "正在启动播放器…"));
             using var moonlight = StartStream(friend.Node.Ip);
+            progress?.Report(new WatchProgress(WatchStage.Streaming, "播放器已启动。"));
             using var heartbeatCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             var heartbeat = HeartbeatAsync(baseUrl, lease.LeaseId, heartbeatCancellation.Token);
             try
@@ -398,3 +405,13 @@ public sealed class MoonlightLauncher
         }
     }
 }
+
+public enum WatchStage
+{
+    Reserving,
+    Pairing,
+    StartingPlayer,
+    Streaming
+}
+
+public sealed record WatchProgress(WatchStage Stage, string Message);

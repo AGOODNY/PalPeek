@@ -17,5 +17,10 @@
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Assets\palpeek.ico" />
+    <Content Include="Assets\faq.md">
+      <Link>docs\faq.md</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
   </ItemGroup>
 </Project>

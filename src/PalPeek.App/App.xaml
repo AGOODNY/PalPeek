@@ -6,6 +6,13 @@
         <SolidColorBrush x:Key="BackgroundBrush" Color="#10131A"/>
         <SolidColorBrush x:Key="CardBrush" Color="#1A1F2B"/>
         <SolidColorBrush x:Key="AccentBrush" Color="#79E2B8"/>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        <Style x:Key="SettingsCardStyle" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource CardBrush}"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="18"/>
+            <Setter Property="Margin" Value="0,0,0,12"/>
+        </Style>
         <Style TargetType="Button">
             <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
             <Setter Property="Foreground" Value="#10131A"/>
