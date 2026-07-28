@@ -22,15 +22,20 @@ public static class MoonlightCommandLine
 
     public static IReadOnlyList<string> Stream(string host, StreamQuality quality)
     {
-        var resolution = quality == StreamQuality.P1080_60 ? "1920x1080" : "1280x720";
-        var bitrate = quality == StreamQuality.P1080_60 ? "8000" : "4000";
+        var (resolution, fps, bitrate) = quality switch
+        {
+            StreamQuality.P720_30 => ("1280x720", "30", "2000"),
+            StreamQuality.P720_60 => ("1280x720", "60", "4000"),
+            StreamQuality.P1080_60 => ("1920x1080", "60", "8000"),
+            _ => throw new ArgumentOutOfRangeException(nameof(quality), quality, null)
+        };
         return
         [
             "stream",
             host,
             AppName,
             "--resolution", resolution,
-            "--fps", "60",
+            "--fps", fps,
             "--bitrate", bitrate,
             "--packet-size", "1024",
             "--video-codec", "H.264",

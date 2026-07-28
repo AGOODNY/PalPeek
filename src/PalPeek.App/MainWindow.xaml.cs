@@ -15,6 +15,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private readonly HostStateStore _hostState;
     private readonly SharingControl _sharing;
     private readonly SettingsWindowFactory _settingsFactory;
+    private readonly DiagnosticsWindowFactory _diagnosticsFactory;
     private string _networkStatus = "正在检查 Tailscale…";
     private bool _isNetworkLoading = true;
     private string _localStatus = "没有运行中的游戏";
@@ -30,6 +31,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private WatchStage? _watchStage;
     private bool _watchTransitioning;
     private SettingsWindow? _settingsWindow;
+    private DiagnosticsWindow? _diagnosticsWindow;
 
     public MainWindow(
         FriendDiscovery discovery,
@@ -37,7 +39,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ITailscaleService tailscale,
         HostStateStore hostState,
         SharingControl sharing,
-        SettingsWindowFactory settingsFactory)
+        SettingsWindowFactory settingsFactory,
+        DiagnosticsWindowFactory diagnosticsFactory)
     {
         InitializeComponent();
         DataContext = this;
@@ -47,6 +50,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         _hostState = hostState;
         _sharing = sharing;
         _settingsFactory = settingsFactory;
+        _diagnosticsFactory = diagnosticsFactory;
         _discovery.Changed += Discovery_Changed;
         _discovery.ProbeFailed += Discovery_ProbeFailed;
         _hostState.Changed += HostState_Changed;
@@ -213,6 +217,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private void SettingsButton_Click(object sender, RoutedEventArgs e) => OpenSettings();
 
+    private void DiagnosticsButton_Click(object sender, RoutedEventArgs e) =>
+        OpenDiagnostics();
+
     public void OpenSettings()
     {
         if (_settingsWindow is { IsVisible: true })
@@ -227,6 +234,20 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             UninstallRequested?.Invoke(this, EventArgs.Empty);
         _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         _settingsWindow.Show();
+    }
+
+    public void OpenDiagnostics()
+    {
+        if (_diagnosticsWindow is { IsVisible: true })
+        {
+            _diagnosticsWindow.Activate();
+            return;
+        }
+
+        _diagnosticsWindow = _diagnosticsFactory.Create();
+        _diagnosticsWindow.Owner = this;
+        _diagnosticsWindow.Closed += (_, _) => _diagnosticsWindow = null;
+        _diagnosticsWindow.Show();
     }
 
     private async Task RestartWatchAsync(FriendStream stream)
@@ -425,5 +446,11 @@ public sealed class FriendCard
     public bool IsConnecting { get; }
 
     private static string QualityText(StreamQuality quality) =>
-        quality == StreamQuality.P1080_60 ? "1080p60" : "720p60";
+        quality switch
+        {
+            StreamQuality.P720_30 => "720p30",
+            StreamQuality.P720_60 => "720p60",
+            StreamQuality.P1080_60 => "1080p60",
+            _ => "未知画质"
+        };
 }

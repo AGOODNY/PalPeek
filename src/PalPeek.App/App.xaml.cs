@@ -44,6 +44,8 @@ public partial class App : System.Windows.Application
                 services.AddSingleton<SharingControl>();
                 services.AddSingleton<StartupManager>();
                 services.AddSingleton<SettingsWindowFactory>();
+                services.AddSingleton<DiagnosticsService>();
+                services.AddSingleton<DiagnosticsWindowFactory>();
                 services.AddSingleton<SunshineBridge>();
                 services.AddHostedService(
                     sp => sp.GetRequiredService<SunshineBridge>());

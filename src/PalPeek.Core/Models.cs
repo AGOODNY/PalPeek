@@ -12,6 +12,7 @@ public static class Protocol
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum StreamQuality
 {
+    P720_30,
     P720_60,
     P1080_60
 }
@@ -56,7 +57,7 @@ public sealed record HostStatus(
 
 public static class BuildInfo
 {
-    public const string Version = "0.2.0";
+    public const string Version = "0.3.0";
 }
 
 public sealed record PairRequest(int SchemaVersion, string ClientId, string Pin);

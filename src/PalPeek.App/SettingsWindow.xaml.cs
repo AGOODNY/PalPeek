@@ -12,6 +12,7 @@ public partial class SettingsWindow : Window, INotifyPropertyChanged
     private readonly ConfigStore _config;
     private readonly StartupManager _startup;
     private readonly SharingControl _sharing;
+    private QualityOption _selectedQualityOption;
     private string _saveStatus = string.Empty;
 
     public SettingsWindow(
@@ -33,11 +34,29 @@ public partial class SettingsWindow : Window, INotifyPropertyChanged
                     game.Name,
                     _options.BlockedGameAppIds.Contains(game.AppId),
                     SetGameBlocked)));
+        QualityOptions =
+        [
+            new QualityOption(
+                StreamQuality.P720_30,
+                "省流",
+                "720p30 / 2 Mbps · 网络受限时更稳定"),
+            new QualityOption(
+                StreamQuality.P720_60,
+                "流畅",
+                "720p60 / 4 Mbps · 推荐默认值"),
+            new QualityOption(
+                StreamQuality.P1080_60,
+                "清晰",
+                "1080p60 / 8 Mbps · 需要更好的网络")
+        ];
+        _selectedQualityOption = QualityOptions.First(
+            option => option.Value == _options.Quality);
         InitializeComponent();
         DataContext = this;
     }
 
     public ObservableCollection<GameSharingOption> Games { get; }
+    public IReadOnlyList<QualityOption> QualityOptions { get; }
     public Visibility EmptyGamesVisibility =>
         Games.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
@@ -78,6 +97,21 @@ public partial class SettingsWindow : Window, INotifyPropertyChanged
                     MessageBoxImage.Error);
                 OnPropertyChanged();
             }
+        }
+    }
+
+    public QualityOption SelectedQualityOption
+    {
+        get => _selectedQualityOption;
+        set
+        {
+            if (value is null || _selectedQualityOption == value)
+                return;
+            _selectedQualityOption = value;
+            _options.Quality = value.Value;
+            _config.Save(_options);
+            SaveStatus = $"观战画质已设为“{value.Name}”，下次连接生效。";
+            OnPropertyChanged();
         }
     }
 
@@ -126,6 +160,11 @@ public partial class SettingsWindow : Window, INotifyPropertyChanged
     private void OnPropertyChanged([CallerMemberName] string? name = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
+
+public sealed record QualityOption(
+    StreamQuality Value,
+    string Name,
+    string Detail);
 
 public sealed class GameSharingOption : INotifyPropertyChanged
 {

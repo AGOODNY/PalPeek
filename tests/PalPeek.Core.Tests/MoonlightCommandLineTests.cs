@@ -55,6 +55,23 @@ public sealed class MoonlightCommandLineTests
         Assert.Equal("1024", ValueAfter(arguments, "--packet-size"));
     }
 
+    [Theory]
+    [InlineData(StreamQuality.P720_30, "1280x720", "30", "2000")]
+    [InlineData(StreamQuality.P720_60, "1280x720", "60", "4000")]
+    [InlineData(StreamQuality.P1080_60, "1920x1080", "60", "8000")]
+    public void StreamUsesRequestedQualityProfile(
+        StreamQuality quality,
+        string resolution,
+        string fps,
+        string bitrate)
+    {
+        var arguments = MoonlightCommandLine.Stream("100.64.0.2", quality);
+
+        Assert.Equal(resolution, ValueAfter(arguments, "--resolution"));
+        Assert.Equal(fps, ValueAfter(arguments, "--fps"));
+        Assert.Equal(bitrate, ValueAfter(arguments, "--bitrate"));
+    }
+
     private static string ValueAfter(IReadOnlyList<string> arguments, string option)
     {
         var index = arguments.ToList().IndexOf(option);

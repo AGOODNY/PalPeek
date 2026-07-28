@@ -37,6 +37,34 @@
                 </Border>
 
                 <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="250"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Margin="0,0,22,0">
+                            <TextBlock Text="观战画质" FontSize="17" FontWeight="SemiBold"/>
+                            <TextBlock Text="本机启动 Moonlight 观看好友时使用。修改不会中断当前播放，将在下次连接时生效。"
+                                       Foreground="#9DA8BA" TextWrapping="Wrap" Margin="0,5,0,0"/>
+                        </StackPanel>
+                        <ComboBox Grid.Column="1"
+                                  ItemsSource="{Binding QualityOptions}"
+                                  SelectedItem="{Binding SelectedQualityOption, Mode=TwoWay}"
+                                  VerticalAlignment="Center" Padding="8,6">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{Binding Detail}" FontSize="11"
+                                                   Foreground="#596376"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource SettingsCardStyle}">
                     <Expander IsExpanded="True" Foreground="#F4F6FA">
                         <Expander.Header>
                             <StackPanel Margin="4,0,0,0">

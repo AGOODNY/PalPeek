@@ -19,6 +19,9 @@ public sealed class MoonlightLauncher
     private readonly PalPeekOptions _options;
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(5) };
     private readonly HttpClient _pairingHttp = new() { Timeout = Timeout.InfiniteTimeSpan };
+    private readonly object _diagnosticsGate = new();
+    private WatchDiagnosticsSnapshot _diagnostics =
+        new(false, false, false, false, null, null, DateTimeOffset.MinValue);
 
     public MoonlightLauncher(PalPeekOptions options) => _options = options;
 
@@ -34,18 +37,63 @@ public sealed class MoonlightLauncher
         SettingsFileName);
 
     public bool IsInstalled => File.Exists(ExecutablePath);
+    public WatchDiagnosticsSnapshot Diagnostics
+    {
+        get
+        {
+            lock (_diagnosticsGate)
+                return _diagnostics;
+        }
+    }
 
     public async Task WatchAsync(
         FriendStream friend,
         IProgress<WatchProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        ResetDiagnostics();
+        try
+        {
+            await WatchCoreAsync(friend, progress, cancellationToken);
+            UpdateDiagnostics(current => current with
+            {
+                IsStreaming = false,
+                UpdatedAt = DateTimeOffset.UtcNow
+            });
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            UpdateDiagnostics(current => current with
+            {
+                IsStreaming = false,
+                LastError = null,
+                UpdatedAt = DateTimeOffset.UtcNow
+            });
+            throw;
+        }
+        catch (Exception ex)
+        {
+            UpdateDiagnostics(current => current with
+            {
+                IsStreaming = false,
+                LastError = ex.Message,
+                UpdatedAt = DateTimeOffset.UtcNow
+            });
+            throw;
+        }
+    }
+
+    private async Task WatchCoreAsync(
+        FriendStream friend,
+        IProgress<WatchProgress>? progress,
+        CancellationToken cancellationToken)
+    {
         if (!IsInstalled)
             throw new FileNotFoundException("未找到内置 Moonlight 播放组件。", ExecutablePath);
         if (friend.Status.Game is null)
             throw new InvalidOperationException("好友的观战会话已经结束。");
 
-        progress?.Report(new WatchProgress(WatchStage.Reserving, "正在申请观看名额…"));
+        ReportProgress(progress, WatchStage.Reserving, "正在申请观看名额…");
         var baseUrl = $"http://{friend.Node.Ip}:{Protocol.ApiPort}";
         var viewerId = Environment.MachineName;
         using var reserve = await _http.PostAsJsonAsync(
@@ -58,14 +106,29 @@ public sealed class MoonlightLauncher
         var lease = await reserve.Content.ReadFromJsonAsync<ReservationResponse>(
             cancellationToken: cancellationToken)
             ?? throw new IOException("好友没有返回观看名额。");
+        UpdateDiagnostics(current => current with
+        {
+            ReservationSucceeded = true,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
 
         try
         {
-            progress?.Report(new WatchProgress(WatchStage.Pairing, "正在连接主播并检查配对…"));
+            ReportProgress(progress, WatchStage.Pairing, "正在连接主播并检查配对…");
             await EnsurePairedAsync(friend.Node.Ip, baseUrl, viewerId, cancellationToken);
-            progress?.Report(new WatchProgress(WatchStage.StartingPlayer, "正在启动播放器…"));
+            UpdateDiagnostics(current => current with
+            {
+                PairingSucceeded = true,
+                UpdatedAt = DateTimeOffset.UtcNow
+            });
+            ReportProgress(progress, WatchStage.StartingPlayer, "正在启动播放器…");
             using var moonlight = StartStream(friend.Node.Ip);
-            progress?.Report(new WatchProgress(WatchStage.Streaming, "播放器已启动。"));
+            UpdateDiagnostics(current => current with
+            {
+                PlayerStarted = true,
+                UpdatedAt = DateTimeOffset.UtcNow
+            });
+            ReportProgress(progress, WatchStage.Streaming, "播放器已启动。");
             using var heartbeatCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             var heartbeat = HeartbeatAsync(baseUrl, lease.LeaseId, heartbeatCancellation.Token);
             try
@@ -99,6 +162,43 @@ public sealed class MoonlightLauncher
             try { await _http.DeleteAsync($"{baseUrl}/api/v1/reservations/{lease.LeaseId}", CancellationToken.None); }
             catch { }
         }
+    }
+
+    private void ResetDiagnostics()
+    {
+        lock (_diagnosticsGate)
+        {
+            _diagnostics = new WatchDiagnosticsSnapshot(
+                false,
+                false,
+                false,
+                false,
+                null,
+                null,
+                DateTimeOffset.UtcNow);
+        }
+    }
+
+    private void ReportProgress(
+        IProgress<WatchProgress>? progress,
+        WatchStage stage,
+        string message)
+    {
+        UpdateDiagnostics(current => current with
+        {
+            CurrentStage = stage,
+            IsStreaming = stage == WatchStage.Streaming,
+            LastError = null,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        progress?.Report(new WatchProgress(stage, message));
+    }
+
+    private void UpdateDiagnostics(
+        Func<WatchDiagnosticsSnapshot, WatchDiagnosticsSnapshot> update)
+    {
+        lock (_diagnosticsGate)
+            _diagnostics = update(_diagnostics);
     }
 
     private async Task EnsurePairedAsync(
@@ -415,3 +515,11 @@ public enum WatchStage
 }
 
 public sealed record WatchProgress(WatchStage Stage, string Message);
+public sealed record WatchDiagnosticsSnapshot(
+    bool ReservationSucceeded,
+    bool PairingSucceeded,
+    bool PlayerStarted,
+    bool IsStreaming,
+    WatchStage? CurrentStage,
+    string? LastError,
+    DateTimeOffset UpdatedAt);
