@@ -13,6 +13,9 @@
             <Setter Property="Padding" Value="18"/>
             <Setter Property="Margin" Value="0,0,0,12"/>
         </Style>
+        <Style TargetType="CheckBox">
+            <Setter Property="Foreground" Value="#D7DDEA"/>
+        </Style>
         <Style TargetType="Button">
             <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
             <Setter Property="Foreground" Value="#10131A"/>

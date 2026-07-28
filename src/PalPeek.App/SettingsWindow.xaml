@@ -37,33 +37,42 @@
                 </Border>
 
                 <Border Style="{StaticResource SettingsCardStyle}">
-                    <StackPanel>
-                        <TextBlock Text="始终禁止共享的游戏" FontSize="17" FontWeight="SemiBold"/>
-                        <TextBlock Text="按 Steam 游戏设置。规则使用 App ID 保存，游戏更新或移动位置后仍然有效。"
-                                   Foreground="#9DA8BA" TextWrapping="Wrap" Margin="0,5,0,12"/>
-                        <TextBlock Text="没有找到已安装的 Steam 游戏。"
-                                   Foreground="#788396" Visibility="{Binding EmptyGamesVisibility}"/>
-                        <ItemsControl ItemsSource="{Binding Games}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Grid Margin="0,5">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel>
-                                            <TextBlock Text="{Binding Name}"/>
-                                            <TextBlock Text="{Binding AppIdText}"
-                                                       FontSize="11" Foreground="#788396"/>
-                                        </StackPanel>
-                                        <CheckBox Grid.Column="1" Content="禁止共享"
-                                                  IsChecked="{Binding IsBlocked}"
-                                                  VerticalAlignment="Center"/>
-                                    </Grid>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
+                    <Expander IsExpanded="True" Foreground="#F4F6FA">
+                        <Expander.Header>
+                            <StackPanel Margin="4,0,0,0">
+                                <TextBlock Text="始终禁止共享的游戏"
+                                           FontSize="17" FontWeight="SemiBold"/>
+                                <TextBlock Text="点击此处收起或展开游戏列表"
+                                           Foreground="#9DA8BA" FontSize="12" Margin="0,4,0,0"/>
+                            </StackPanel>
+                        </Expander.Header>
+                        <StackPanel Margin="24,12,0,0">
+                            <TextBlock Text="按 Steam 游戏设置。规则使用 App ID 保存，游戏更新或移动位置后仍然有效。"
+                                       Foreground="#9DA8BA" TextWrapping="Wrap" Margin="0,0,0,12"/>
+                            <TextBlock Text="没有找到已安装的 Steam 游戏。"
+                                       Foreground="#788396" Visibility="{Binding EmptyGamesVisibility}"/>
+                            <ItemsControl ItemsSource="{Binding Games}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Name}"/>
+                                                <TextBlock Text="{Binding AppIdText}"
+                                                           FontSize="11" Foreground="#788396"/>
+                                            </StackPanel>
+                                            <CheckBox Grid.Column="1" Content="禁止共享"
+                                                      IsChecked="{Binding IsBlocked}"
+                                                      VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Expander>
                 </Border>
 
                 <Border Style="{StaticResource SettingsCardStyle}">
