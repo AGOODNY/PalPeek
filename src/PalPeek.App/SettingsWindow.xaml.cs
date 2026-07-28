@@ -94,6 +94,7 @@ public partial class SettingsWindow : Window, INotifyPropertyChanged
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
+    public event EventHandler? UninstallRequested;
 
     private void SetGameBlocked(uint appId, bool blocked)
     {
@@ -116,6 +117,9 @@ public partial class SettingsWindow : Window, INotifyPropertyChanged
         var window = new FaqWindow { Owner = this };
         window.ShowDialog();
     }
+
+    private void UninstallButton_Click(object sender, RoutedEventArgs e) =>
+        UninstallRequested?.Invoke(this, EventArgs.Empty);
 
     private void DoneButton_Click(object sender, RoutedEventArgs e) => Close();
 

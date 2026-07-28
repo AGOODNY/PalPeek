@@ -98,6 +98,23 @@
                                 VerticalAlignment="Center"/>
                     </Grid>
                 </Border>
+
+                <Border Style="{StaticResource SettingsCardStyle}" Margin="0,12,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="卸载 PalPeek" FontSize="17" FontWeight="SemiBold"/>
+                            <TextBlock Text="移除程序文件、快捷方式和 PalPeek 防火墙规则。"
+                                       Foreground="#9DA8BA" TextWrapping="Wrap" Margin="0,5,20,0"/>
+                        </StackPanel>
+                        <Button Grid.Column="1" Content="卸载 PalPeek…"
+                                Click="UninstallButton_Click" VerticalAlignment="Center"
+                                Background="#D75A65" Foreground="White"/>
+                    </Grid>
+                </Border>
             </StackPanel>
         </ScrollViewer>
 

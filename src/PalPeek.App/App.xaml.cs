@@ -92,6 +92,7 @@ public partial class App : System.Windows.Application
                 ShutdownApplication,
                 window.OpenSettings,
                 RequestUninstall);
+            window.UninstallRequested += (_, _) => RequestUninstall();
             _singleInstance.StartListening(async command =>
             {
                 if (command.Equals("--shutdown-for-update", StringComparison.OrdinalIgnoreCase))

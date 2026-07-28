@@ -115,6 +115,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
+    public event EventHandler? UninstallRequested;
 
     private async Task RefreshNetworkAsync()
     {
@@ -222,6 +223,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         _settingsWindow = _settingsFactory.Create();
         _settingsWindow.Owner = this;
+        _settingsWindow.UninstallRequested += (_, _) =>
+            UninstallRequested?.Invoke(this, EventArgs.Empty);
         _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         _settingsWindow.Show();
     }
