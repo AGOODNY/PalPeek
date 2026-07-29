@@ -1,21 +1,64 @@
-<Window x:Class="PalPeek.FaqWindow"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="PalPeek 常见问题" Width="620" Height="480" MinWidth="500" MinHeight="360"
-        Icon="pack://application:,,,/PalPeek;component/Assets/palpeek.ico"
-        Background="{StaticResource BackgroundBrush}" Foreground="#F4F6FA"
-        WindowStartupLocation="CenterOwner">
-    <Grid Margin="28">
+<UserControl x:Class="PalPeek.FaqWindow"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="Transparent">
+    <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
-        <TextBlock Text="常见问题" FontSize="28" FontWeight="Bold" Margin="0,0,0,16"/>
-        <RichTextBox x:Name="DocumentView" Grid.Row="1" IsReadOnly="True"
-                     Background="{StaticResource CardBrush}" Foreground="#F4F6FA"
-                     BorderThickness="0" Padding="18" VerticalScrollBarVisibility="Auto"/>
-        <Button Grid.Row="2" Content="关闭" Click="CloseButton_Click"
-                HorizontalAlignment="Right" Margin="0,16,0,0"/>
+        <StackPanel Margin="0,0,0,20">
+            <TextBlock Text="帮助中心" Style="{StaticResource PageTitleStyle}"/>
+            <TextBlock Text="快速处理连接、分享和观战问题"
+                       Style="{StaticResource PageSubtitleStyle}"/>
+        </StackPanel>
+        <Border Grid.Row="1" Height="2" Background="{StaticResource BorderBrush}"
+                Margin="0,0,0,20">
+            <Border Width="92" Background="{StaticResource AccentBrush}"
+                    HorizontalAlignment="Left"/>
+        </Border>
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="220"/>
+                <ColumnDefinition Width="18"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Border Style="{StaticResource CardStyle}" Padding="18">
+                <StackPanel>
+                    <TextBlock Text="QUICK LINKS" Style="{StaticResource SectionLabelStyle}"
+                               Margin="0,0,0,16"/>
+                    <Border Background="{StaticResource RaisedBrush}" CornerRadius="7"
+                            Padding="12" Margin="0,0,0,8">
+                        <TextBlock Text="看不到好友" FontWeight="SemiBold"/>
+                    </Border>
+                    <Border Background="{StaticResource RaisedBrush}" CornerRadius="7"
+                            Padding="12" Margin="0,0,0,8">
+                        <TextBlock Text="无法开始观战" FontWeight="SemiBold"/>
+                    </Border>
+                    <Border Background="{StaticResource RaisedBrush}" CornerRadius="7"
+                            Padding="12" Margin="0,0,0,8">
+                        <TextBlock Text="分享状态异常" FontWeight="SemiBold"/>
+                    </Border>
+                    <Border Margin="0,18,0,0" Background="#10251F"
+                            BorderBrush="#245A49" BorderThickness="1"
+                            CornerRadius="8" Padding="12">
+                        <StackPanel>
+                            <TextBlock Text="安全提示" Foreground="{StaticResource AccentBrush}"
+                                       FontWeight="SemiBold"/>
+                            <TextBlock Text="PalPeek 只传输游戏画面和音频，不提供远程控制。"
+                                       Foreground="{StaticResource SecondaryTextBrush}"
+                                       TextWrapping="Wrap" FontSize="12" Margin="0,6,0,0"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="2" Style="{StaticResource CardStyle}" Padding="22">
+                <FlowDocumentScrollViewer x:Name="DocumentView"
+                                          VerticalScrollBarVisibility="Auto"
+                                          IsToolBarVisible="False"
+                                          Background="Transparent"/>
+            </Border>
+        </Grid>
     </Grid>
-</Window>
+</UserControl>

@@ -1,10 +1,11 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Documents;
 using Media = System.Windows.Media;
 
 namespace PalPeek;
 
-public partial class FaqWindow : Window
+public partial class FaqWindow : System.Windows.Controls.UserControl
 {
     public FaqWindow()
     {
@@ -19,7 +20,9 @@ public partial class FaqWindow : Window
             FontFamily = new Media.FontFamily("Microsoft YaHei UI"),
             FontSize = 14,
             Foreground = new Media.SolidColorBrush(Media.Color.FromRgb(244, 246, 250)),
-            PagePadding = new Thickness(0)
+            Background = Media.Brushes.Transparent,
+            PagePadding = new Thickness(0),
+            LineHeight = 24
         };
         var path = Path.Combine(AppContext.BaseDirectory, "docs", "faq.md");
         if (!File.Exists(path))
@@ -39,6 +42,7 @@ public partial class FaqWindow : Window
                 {
                     FontSize = 21,
                     FontWeight = FontWeights.Bold,
+                    Foreground = new Media.SolidColorBrush(Media.Color.FromRgb(53, 230, 196)),
                     Margin = new Thickness(0, 0, 0, 14)
                 });
             }
@@ -47,7 +51,8 @@ public partial class FaqWindow : Window
                 document.Blocks.Add(new Paragraph(new Run(line))
                 {
                     FontWeight = FontWeights.SemiBold,
-                    Margin = new Thickness(0, 12, 0, 4)
+                    FontSize = 16,
+                    Margin = new Thickness(0, 16, 0, 5)
                 });
             }
             else
@@ -62,5 +67,4 @@ public partial class FaqWindow : Window
         return document;
     }
 
-    private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();
 }

@@ -1,0 +1,220 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+  <defs>
+    <linearGradient id="windowBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#070A12"/>
+      <stop offset="1" stop-color="#0A101B"/>
+    </linearGradient>
+    <linearGradient id="cyanGlow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#35E6C4" stop-opacity=".18"/>
+      <stop offset="1" stop-color="#35E6C4" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="coverA" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#081526"/>
+      <stop offset=".52" stop-color="#245881"/>
+      <stop offset="1" stop-color="#8B5CFF"/>
+    </linearGradient>
+    <linearGradient id="coverB" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#07141A"/>
+      <stop offset=".55" stop-color="#176B65"/>
+      <stop offset="1" stop-color="#35E6C4"/>
+    </linearGradient>
+    <linearGradient id="coverLocal" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#161128"/>
+      <stop offset=".55" stop-color="#432A61"/>
+      <stop offset="1" stop-color="#FF5F70"/>
+    </linearGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#35E6C4" stroke-opacity=".035"/>
+    </pattern>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="7" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="26" flood-color="#000" flood-opacity=".36"/>
+    </filter>
+    <clipPath id="localClip"><rect x="364" y="330" width="390" height="190" rx="12"/></clipPath>
+    <clipPath id="aClip"><rect x="836" y="284" width="256" height="192" rx="10"/></clipPath>
+    <clipPath id="bClip"><rect x="836" y="554" width="256" height="192" rx="10"/></clipPath>
+    <style>
+      .cn { font-family: "Microsoft YaHei UI","Microsoft YaHei",sans-serif; }
+      .tech { font-family: "Bahnschrift","Segoe UI",sans-serif; letter-spacing: 1.2px; }
+      .primary { fill:#F4F7FB; }
+      .secondary { fill:#9AABC1; }
+      .muted { fill:#66778F; }
+      .panel { fill:#0D1420; stroke:#243248; stroke-width:1; }
+      .raised { fill:#111D2B; stroke:#2B3C53; stroke-width:1; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1000" fill="#03050A"/>
+  <rect x="30" y="24" width="1540" height="952" rx="16" fill="url(#windowBg)" stroke="#29374B" filter="url(#shadow)"/>
+  <rect x="30" y="24" width="1540" height="952" rx="16" fill="url(#grid)"/>
+
+  <!-- custom title bar -->
+  <path d="M46 24H1554A16 16 0 0 1 1570 40V94H30V40A16 16 0 0 1 46 24Z" fill="#090E18"/>
+  <path d="M30 94H1570" stroke="#202C3D"/>
+  <g transform="translate(58 45)">
+    <path d="M0 15 15 0h22l15 15-15 15H15Z" fill="none" stroke="#35E6C4" stroke-width="2.5"/>
+    <path d="m16 8 12 7-12 7Z" fill="#35E6C4"/>
+    <text x="67" y="23" class="tech primary" font-size="22" font-weight="700">PALPEEK</text>
+    <text x="196" y="22" class="tech muted" font-size="11">SPECTATOR NETWORK</text>
+  </g>
+  <g transform="translate(1130 54)">
+    <circle cx="0" cy="8" r="4" fill="#3DDC97" filter="url(#glow)"/>
+    <text x="14" y="12" class="tech secondary" font-size="12">TAILNET ONLINE</text>
+  </g>
+  <g stroke="#9AABC1" stroke-width="1.5" fill="none">
+    <path d="M1386 61h14"/>
+    <rect x="1450" y="54" width="14" height="12"/>
+    <path d="m1520 54 14 14m0-14-14 14"/>
+  </g>
+
+  <!-- sidebar -->
+  <path d="M30 94H322V976H46A16 16 0 0 1 30 960Z" fill="#090E18"/>
+  <path d="M322 94V976" stroke="#202C3D"/>
+  <text x="64" y="146" class="tech muted" font-size="10">NAVIGATION / 导航</text>
+
+  <g transform="translate(50 171)">
+    <rect width="252" height="62" rx="9" fill="#111D2B" stroke="#2B3C53"/>
+    <rect width="4" height="62" rx="2" fill="#35E6C4" filter="url(#glow)"/>
+    <circle cx="32" cy="31" r="11" fill="none" stroke="#35E6C4" stroke-width="2"/>
+    <path d="M32 24v14m-7-7h14" stroke="#35E6C4" stroke-width="1.6"/>
+    <text x="60" y="38" class="cn primary" font-size="17" font-weight="600">观战大厅</text>
+  </g>
+  <g transform="translate(50 245)">
+    <path d="M22 21h20v20H22zm5-6v6m10-6v6m-10 20v6m10-6v6" fill="none" stroke="#718198" stroke-width="1.7"/>
+    <text x="60" y="38" class="cn secondary" font-size="17">共享设置</text>
+  </g>
+  <g transform="translate(50 311)">
+    <path d="M22 39h6l5-18 7 26 5-13h8" fill="none" stroke="#718198" stroke-width="1.8"/>
+    <text x="60" y="38" class="cn secondary" font-size="17">连接诊断</text>
+  </g>
+  <g transform="translate(50 377)">
+    <circle cx="32" cy="31" r="12" fill="none" stroke="#718198" stroke-width="1.7"/>
+    <path d="M29 27a4 4 0 1 1 6 3c-3 2-3 3-3 5m0 5h.01" stroke="#718198" stroke-width="1.7" fill="none"/>
+    <text x="60" y="38" class="cn secondary" font-size="17">帮助</text>
+  </g>
+
+  <g transform="translate(50 844)">
+    <rect width="252" height="104" rx="10" fill="#0D1420" stroke="#243248"/>
+    <text x="18" y="26" class="tech muted" font-size="9">NETWORK STATUS</text>
+    <circle cx="21" cy="51" r="5" fill="#3DDC97"/>
+    <text x="36" y="57" class="cn primary" font-size="14" font-weight="600">Tailscale 已连接</text>
+    <text x="18" y="82" class="tech secondary" font-size="12">100.86.24.17</text>
+    <path d="M210 72h19m-19-7h12m-12 14h15" stroke="#35E6C4" stroke-opacity=".7"/>
+  </g>
+
+  <!-- main header -->
+  <g transform="translate(364 142)">
+    <text x="0" y="38" class="cn primary" font-size="34" font-weight="700">观战大厅</text>
+    <text x="0" y="72" class="cn secondary" font-size="15">发现 Tailnet 中正在直播的游戏</text>
+    <path d="M0 90H760" stroke="#243248"/>
+    <path d="M0 90H92" stroke="#35E6C4" stroke-width="2"/>
+  </g>
+  <g transform="translate(1325 145)">
+    <rect width="188" height="52" rx="9" class="panel"/>
+    <circle cx="23" cy="26" r="5" fill="#3DDC97"/>
+    <text x="38" y="23" class="tech muted" font-size="9">LOCAL STATUS</text>
+    <text x="38" y="39" class="cn primary" font-size="13">串流服务正常</text>
+  </g>
+
+  <!-- local share card -->
+  <g>
+    <text x="364" y="263" class="tech secondary" font-size="12">LOCAL SHARING / 共享状态</text>
+    <rect x="364" y="284" width="390" height="530" rx="13" class="panel"/>
+    <g clip-path="url(#localClip)">
+      <rect x="364" y="330" width="390" height="190" fill="url(#coverLocal)"/>
+      <circle cx="660" cy="380" r="120" fill="#FF5F70" opacity=".12"/>
+      <circle cx="435" cy="495" r="95" fill="#7C5CFF" opacity=".22"/>
+      <path d="M384 490 515 350l66 65 62-102 123 155v72H364Z" fill="#090D18" opacity=".75"/>
+      <path d="m580 340 22 42 46 7-34 32 8 46-42-22-42 22 8-46-34-32 46-7Z" fill="none" stroke="#35E6C4" stroke-opacity=".48"/>
+      <text x="392" y="377" class="tech primary" font-size="12">ACTIVE GAME</text>
+      <text x="392" y="410" class="cn primary" font-size="24" font-weight="700">赛博朋克 2077</text>
+    </g>
+    <g transform="translate(388 552)">
+      <circle cx="5" cy="5" r="5" fill="#3DDC97" filter="url(#glow)"/>
+      <text x="20" y="11" class="cn" fill="#3DDC97" font-size="15" font-weight="600">正在共享</text>
+      <text x="0" y="52" class="tech muted" font-size="10">VIEWERS</text>
+      <text x="0" y="86" class="tech primary" font-size="28" font-weight="700">2 / 3</text>
+      <text x="80" y="85" class="cn secondary" font-size="14">人观看</text>
+      <g transform="translate(0 112)">
+        <rect width="342" height="4" rx="2" fill="#1B2939"/>
+        <rect width="228" height="4" rx="2" fill="#35E6C4" filter="url(#glow)"/>
+      </g>
+      <g transform="translate(0 151)">
+        <rect width="164" height="38" rx="8" fill="#111D2B" stroke="#2B3C53"/>
+        <text x="15" y="25" class="tech secondary" font-size="11">1080P / 60FPS</text>
+        <rect x="178" width="164" height="38" rx="8" fill="#111D2B" stroke="#2B3C53"/>
+        <text x="194" y="25" class="tech secondary" font-size="11">8 MBPS / H.264</text>
+      </g>
+      <g transform="translate(0 222)">
+        <rect width="342" height="54" rx="9" fill="#171822" stroke="#6A3340"/>
+        <text x="171" y="34" text-anchor="middle" class="cn" fill="#FF7B89" font-size="15" font-weight="600">停止分享</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- friend streams -->
+  <g>
+    <text x="800" y="263" class="tech secondary" font-size="12">FRIEND STREAMS / 好友直播</text>
+    <rect x="1030" y="246" width="34" height="24" rx="12" fill="#173C3A" stroke="#247069"/>
+    <text x="1047" y="263" text-anchor="middle" class="tech" fill="#35E6C4" font-size="11">2</text>
+
+    <rect x="800" y="284" width="713" height="236" rx="13" class="panel"/>
+    <g clip-path="url(#aClip)">
+      <rect x="836" y="284" width="256" height="192" fill="url(#coverA)"/>
+      <circle cx="1035" cy="325" r="88" fill="#7C5CFF" opacity=".2"/>
+      <path d="m834 444 75-94 42 46 42-83 107 129v34H834Z" fill="#08101C" opacity=".75"/>
+      <circle cx="933" cy="367" r="39" fill="none" stroke="#9BCBFF" stroke-opacity=".55"/>
+      <path d="M910 367h46M933 344v46" stroke="#9BCBFF" stroke-opacity=".45"/>
+      <text x="856" y="320" class="tech" fill="#DDEBFF" font-size="11">LIVE SIGNAL 01</text>
+    </g>
+    <g transform="translate(1122 316)">
+      <circle cx="5" cy="5" r="5" fill="#3DDC97"/>
+      <text x="19" y="10" class="tech secondary" font-size="11">NOVA · ONLINE</text>
+      <text x="0" y="49" class="cn primary" font-size="24" font-weight="700">星际边境</text>
+      <g transform="translate(0 69)">
+        <rect width="126" height="32" rx="7" fill="#111D2B" stroke="#2B3C53"/>
+        <text x="63" y="21" text-anchor="middle" class="tech secondary" font-size="10">1080P 60FPS</text>
+        <rect x="136" width="118" height="32" rx="7" fill="#111D2B" stroke="#2B3C53"/>
+        <text x="195" y="21" text-anchor="middle" class="cn secondary" font-size="11">1 / 3 人观看</text>
+      </g>
+      <rect y="126" width="354" height="48" rx="9" fill="#35E6C4"/>
+      <text x="177" y="157" text-anchor="middle" class="cn" fill="#07100F" font-size="15" font-weight="700">立即观战</text>
+    </g>
+
+    <rect x="800" y="554" width="713" height="236" rx="13" class="panel"/>
+    <g clip-path="url(#bClip)">
+      <rect x="836" y="554" width="256" height="192" fill="url(#coverB)"/>
+      <circle cx="1020" cy="600" r="100" fill="#35E6C4" opacity=".14"/>
+      <path d="m830 742 80-120 50 58 62-86 86 126v35H830Z" fill="#07151A" opacity=".77"/>
+      <path d="M954 578c43 20 73 59 73 105M954 578c-25 36-26 76-2 119" fill="none" stroke="#B1FFF0" stroke-opacity=".45"/>
+      <text x="856" y="590" class="tech" fill="#DFFFF8" font-size="11">LIVE SIGNAL 02</text>
+    </g>
+    <g transform="translate(1122 586)">
+      <circle cx="5" cy="5" r="5" fill="#3DDC97"/>
+      <text x="19" y="10" class="tech secondary" font-size="11">KITE · ONLINE</text>
+      <text x="0" y="49" class="cn primary" font-size="24" font-weight="700">深空回响</text>
+      <g transform="translate(0 69)">
+        <rect width="126" height="32" rx="7" fill="#111D2B" stroke="#2B3C53"/>
+        <text x="63" y="21" text-anchor="middle" class="tech secondary" font-size="10">720P 60FPS</text>
+        <rect x="136" width="118" height="32" rx="7" fill="#111D2B" stroke="#2B3C53"/>
+        <text x="195" y="21" text-anchor="middle" class="cn secondary" font-size="11">0 / 3 人观看</text>
+      </g>
+      <rect y="126" width="354" height="48" rx="9" fill="#35E6C4"/>
+      <text x="177" y="157" text-anchor="middle" class="cn" fill="#07100F" font-size="15" font-weight="700">立即观战</text>
+    </g>
+  </g>
+
+  <g transform="translate(800 833)">
+    <rect width="713" height="78" rx="11" fill="#0B121D" stroke="#213044"/>
+    <path d="M25 39h23m-11-11 11 11-11 11" fill="none" stroke="#35E6C4" stroke-width="1.5"/>
+    <text x="70" y="34" class="cn primary" font-size="14">好友列表每 5 秒自动同步</text>
+    <text x="70" y="56" class="cn muted" font-size="12">观战仅传输画面与游戏音频，不提供远程控制</text>
+    <text x="677" y="45" text-anchor="end" class="tech muted" font-size="10">PALPEEK v0.3.1</text>
+  </g>
+
+  <!-- decorative corner details -->
+  <path d="M344 116v-10h10M1537 930h10v-10" fill="none" stroke="#35E6C4" stroke-opacity=".45"/>
+</svg>

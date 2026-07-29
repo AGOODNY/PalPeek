@@ -2,7 +2,7 @@
 
 PalPeek 是一款面向小型 Tailscale 好友网络的 Steam 游戏观战工具。玩家启动 Steam 游戏后，PalPeek 会自动识别游戏及其窗口，并允许同一 Tailnet 中的好友通过内置 Moonlight 观看。
 
-> PalPeek 只提供观战，不提供远程控制。当前版本为 **0.3.2**，仅支持 **Windows 11 x64**。
+> PalPeek 只提供观战，不提供远程控制。当前版本为 **0.4.3**，仅支持 **Windows 11 x64**。
 
 ## 目录
 

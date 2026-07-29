@@ -9,6 +9,7 @@
 
 # Local toolchains and dependency caches
 .tools/
+.dotnet-home/
 **/node_modules/
 **/.npm/
 
@@ -24,6 +25,13 @@ TestResults/
 coverage/
 *.log
 *.tmp
+
+# Local diagnostics and machine-specific runtime snapshots
+diagnostics/
+network-diagnostics.txt
+palpeek-ports.txt
+sunshine-runtime-files.txt
+tailscale-status.json
 
 # Local configuration and credentials
 .env

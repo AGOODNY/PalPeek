@@ -2,13 +2,15 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows;
+using System.Windows.Controls;
 
 namespace PalPeek;
 
-public partial class DiagnosticsWindow : Window, INotifyPropertyChanged
+public partial class DiagnosticsWindow : System.Windows.Controls.UserControl, INotifyPropertyChanged
 {
     private readonly DiagnosticsService _diagnostics;
     private bool _isRefreshing;
+    private bool _hasRefreshed;
     private string _summaryText = "正在等待检查…";
 
     public DiagnosticsWindow(DiagnosticsService diagnostics)
@@ -16,7 +18,6 @@ public partial class DiagnosticsWindow : Window, INotifyPropertyChanged
         _diagnostics = diagnostics;
         InitializeComponent();
         DataContext = this;
-        Loaded += async (_, _) => await RefreshAsync();
     }
 
     public ObservableCollection<DiagnosticItem> Items { get; } = new();
@@ -50,6 +51,7 @@ public partial class DiagnosticsWindow : Window, INotifyPropertyChanged
         try
         {
             var report = await _diagnostics.CaptureAsync();
+            _hasRefreshed = true;
             Items.Clear();
             foreach (var item in report.Items)
                 Items.Add(item);
@@ -79,7 +81,11 @@ public partial class DiagnosticsWindow : Window, INotifyPropertyChanged
         }
     }
 
-    private void DoneButton_Click(object sender, RoutedEventArgs e) => Close();
+    public async Task RefreshIfNeededAsync()
+    {
+        if (!_hasRefreshed)
+            await RefreshAsync();
+    }
 
     private void OnPropertyChanged([CallerMemberName] string? name = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));

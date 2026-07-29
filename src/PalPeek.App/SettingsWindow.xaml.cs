@@ -3,10 +3,12 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
 
 namespace PalPeek;
 
-public partial class SettingsWindow : Window, INotifyPropertyChanged
+public partial class SettingsWindow : System.Windows.Controls.UserControl, INotifyPropertyChanged
 {
     private readonly PalPeekOptions _options;
     private readonly ConfigStore _config;
@@ -20,7 +22,8 @@ public partial class SettingsWindow : Window, INotifyPropertyChanged
         ConfigStore config,
         StartupManager startup,
         SharingControl sharing,
-        SteamCatalog catalog)
+        SteamCatalog catalog,
+        GameArtworkService artwork)
     {
         _options = options;
         _config = config;
@@ -33,7 +36,10 @@ public partial class SettingsWindow : Window, INotifyPropertyChanged
                     game.AppId,
                     game.Name,
                     _options.BlockedGameAppIds.Contains(game.AppId),
-                    SetGameBlocked)));
+                    SetGameBlocked,
+                    artwork.CreatePlaceholder(game.AppId, game.Name))));
+        foreach (var game in Games)
+            _ = game.LoadArtworkAsync(artwork);
         QualityOptions =
         [
             new QualityOption(
@@ -115,6 +121,36 @@ public partial class SettingsWindow : Window, INotifyPropertyChanged
         }
     }
 
+    public bool IsQuality72030
+    {
+        get => SelectedQualityOption.Value == StreamQuality.P720_30;
+        set
+        {
+            if (value)
+                SelectQuality(StreamQuality.P720_30);
+        }
+    }
+
+    public bool IsQuality72060
+    {
+        get => SelectedQualityOption.Value == StreamQuality.P720_60;
+        set
+        {
+            if (value)
+                SelectQuality(StreamQuality.P720_60);
+        }
+    }
+
+    public bool IsQuality108060
+    {
+        get => SelectedQualityOption.Value == StreamQuality.P1080_60;
+        set
+        {
+            if (value)
+                SelectQuality(StreamQuality.P1080_60);
+        }
+    }
+
     public string SaveStatus
     {
         get => _saveStatus;
@@ -129,6 +165,7 @@ public partial class SettingsWindow : Window, INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
     public event EventHandler? UninstallRequested;
+    public event EventHandler? HelpRequested;
 
     private void SetGameBlocked(uint appId, bool blocked)
     {
@@ -147,15 +184,18 @@ public partial class SettingsWindow : Window, INotifyPropertyChanged
     }
 
     private void FaqButton_Click(object sender, RoutedEventArgs e)
-    {
-        var window = new FaqWindow { Owner = this };
-        window.ShowDialog();
-    }
+        => HelpRequested?.Invoke(this, EventArgs.Empty);
 
     private void UninstallButton_Click(object sender, RoutedEventArgs e) =>
         UninstallRequested?.Invoke(this, EventArgs.Empty);
 
-    private void DoneButton_Click(object sender, RoutedEventArgs e) => Close();
+    private void SelectQuality(StreamQuality quality)
+    {
+        SelectedQualityOption = QualityOptions.First(option => option.Value == quality);
+        OnPropertyChanged(nameof(IsQuality72030));
+        OnPropertyChanged(nameof(IsQuality72060));
+        OnPropertyChanged(nameof(IsQuality108060));
+    }
 
     private void OnPropertyChanged([CallerMemberName] string? name = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
@@ -170,22 +210,36 @@ public sealed class GameSharingOption : INotifyPropertyChanged
 {
     private readonly Action<uint, bool> _changed;
     private bool _isBlocked;
+    private ImageSource _artwork;
 
     public GameSharingOption(
         uint appId,
         string name,
         bool isBlocked,
-        Action<uint, bool> changed)
+        Action<uint, bool> changed,
+        ImageSource artwork)
     {
         AppId = appId;
         Name = name;
         _isBlocked = isBlocked;
         _changed = changed;
+        _artwork = artwork;
     }
 
     public uint AppId { get; }
     public string Name { get; }
     public string AppIdText => $"Steam App ID {AppId}";
+    public ImageSource Artwork
+    {
+        get => _artwork;
+        private set
+        {
+            if (ReferenceEquals(_artwork, value))
+                return;
+            _artwork = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Artwork)));
+        }
+    }
 
     public bool IsBlocked
     {
@@ -201,4 +255,9 @@ public sealed class GameSharingOption : INotifyPropertyChanged
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    public async Task LoadArtworkAsync(GameArtworkService artwork)
+    {
+        Artwork = await artwork.GetArtworkAsync(AppId, Name);
+    }
 }

@@ -42,6 +42,7 @@ public partial class App : System.Windows.Application
                 services.AddSingleton<EventHub>();
                 services.AddSingleton<HostStateStore>();
                 services.AddSingleton<SharingControl>();
+                services.AddSingleton<GameArtworkService>();
                 services.AddSingleton<StartupManager>();
                 services.AddSingleton<SettingsWindowFactory>();
                 services.AddSingleton<DiagnosticsService>();

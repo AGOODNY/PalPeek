@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 
 namespace PalPeek;
 
@@ -14,8 +15,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private readonly ITailscaleService _tailscale;
     private readonly HostStateStore _hostState;
     private readonly SharingControl _sharing;
-    private readonly SettingsWindowFactory _settingsFactory;
-    private readonly DiagnosticsWindowFactory _diagnosticsFactory;
+    private readonly GameArtworkService _artwork;
+    private readonly DiagnosticsWindow _diagnosticsPage;
     private string _networkStatus = "正在检查 Tailscale…";
     private bool _isNetworkLoading = true;
     private string _localStatus = "没有运行中的游戏";
@@ -32,8 +33,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private FriendStream? _activeWatch;
     private WatchStage? _watchStage;
     private bool _watchTransitioning;
-    private SettingsWindow? _settingsWindow;
-    private DiagnosticsWindow? _diagnosticsWindow;
+    private string _localGameName = "等待 Steam 游戏";
+    private string _localShareState = "未检测到游戏";
+    private string _localViewerText = $"0 / {Protocol.MaxViewers} 人观看";
+    private double _localViewerPercent;
+    private string _localQualityText = "等待串流参数";
+    private ImageSource _localArtwork;
+    private uint? _localArtworkAppId;
 
     public MainWindow(
         FriendDiscovery discovery,
@@ -42,8 +48,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         HostStateStore hostState,
         SharingControl sharing,
         SettingsWindowFactory settingsFactory,
-        DiagnosticsWindowFactory diagnosticsFactory)
+        DiagnosticsWindowFactory diagnosticsFactory,
+        GameArtworkService artwork)
     {
+        _artwork = artwork;
+        _localArtwork = artwork.CreatePlaceholder(0, "PALPEEK");
         InitializeComponent();
         DataContext = this;
         _discovery = discovery;
@@ -51,8 +60,15 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         _tailscale = tailscale;
         _hostState = hostState;
         _sharing = sharing;
-        _settingsFactory = settingsFactory;
-        _diagnosticsFactory = diagnosticsFactory;
+        var settingsPage = settingsFactory.Create();
+        settingsPage.UninstallRequested += (_, _) =>
+            UninstallRequested?.Invoke(this, EventArgs.Empty);
+        settingsPage.HelpRequested += (_, _) => OpenHelp();
+        SettingsPage.Content = settingsPage;
+        _diagnosticsPage = diagnosticsFactory.Create();
+        DiagnosticsPage.Content = _diagnosticsPage;
+        HelpPage.Content = new FaqWindow();
+        HallNav.IsChecked = true;
         _discovery.Changed += Discovery_Changed;
         _discovery.ProbeFailed += Discovery_ProbeFailed;
         _tailscale.SnapshotChanged += Tailscale_SnapshotChanged;
@@ -69,11 +85,51 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             _hostState.Changed -= HostState_Changed;
             _sharing.Changed -= Sharing_Changed;
         };
+        StateChanged += (_, _) =>
+            MaximizeButton.Content = WindowState == WindowState.Maximized
+                ? "\uE923"
+                : "\uE922";
         UpdateSharingUi(_sharing.Get());
     }
 
     public ObservableCollection<FriendCard> Friends { get; } = new();
     public Visibility EmptyVisibility => Friends.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    public string LocalGameName
+    {
+        get => _localGameName;
+        private set => Set(ref _localGameName, value);
+    }
+
+    public string LocalShareState
+    {
+        get => _localShareState;
+        private set => Set(ref _localShareState, value);
+    }
+
+    public string LocalViewerText
+    {
+        get => _localViewerText;
+        private set => Set(ref _localViewerText, value);
+    }
+
+    public double LocalViewerPercent
+    {
+        get => _localViewerPercent;
+        private set => Set(ref _localViewerPercent, value);
+    }
+
+    public string LocalQualityText
+    {
+        get => _localQualityText;
+        private set => Set(ref _localQualityText, value);
+    }
+
+    public ImageSource LocalArtwork
+    {
+        get => _localArtwork;
+        private set => Set(ref _localArtwork, value);
+    }
 
     public string NetworkStatus
     {
@@ -187,6 +243,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private void UpdateSharingUi(SharingSnapshot snapshot)
     {
+        var game = snapshot.DetectedGame;
+        var viewerCount = _latestHostStatus?.ViewerCount ?? 0;
         ShareButtonText = snapshot.DetectedGame is null
             ? "等待游戏"
             : snapshot.BlockReason switch
@@ -208,9 +266,46 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 SharingBlockReason.ManuallyStopped => $"已停止分享 {snapshot.DetectedGame.Name}",
                 _ => $"正在分享 {snapshot.DetectedGame.Name} · {_latestHostStatus?.ViewerCount ?? 0}/{Protocol.MaxViewers} 人观看"
             };
+        LocalGameName = game?.Name ?? "等待 Steam 游戏";
+        LocalShareState = game is null
+            ? "未检测到游戏"
+            : snapshot.BlockReason switch
+            {
+                SharingBlockReason.Invisible => "隐身中",
+                SharingBlockReason.GameDisabled => "已禁止共享",
+                SharingBlockReason.ManuallyStopped => "分享已暂停",
+                _ => "正在共享"
+            };
+        LocalViewerText = $"{viewerCount} / {Protocol.MaxViewers} 人观看";
+        LocalViewerPercent = viewerCount * 100d / Protocol.MaxViewers;
+        LocalQualityText = _latestHostStatus?.Quality switch
+        {
+            StreamQuality.P720_30 => "720P / 30FPS / 2 MBPS",
+            StreamQuality.P720_60 => "720P / 60FPS / 4 MBPS",
+            StreamQuality.P1080_60 => "1080P / 60FPS / 8 MBPS",
+            _ => "等待串流参数"
+        };
+        if (game is null)
+        {
+            _localArtworkAppId = null;
+            LocalArtwork = _artwork.CreatePlaceholder(0, "PALPEEK");
+        }
+        else if (_localArtworkAppId != game.AppId)
+        {
+            _localArtworkAppId = game.AppId;
+            LocalArtwork = _artwork.CreatePlaceholder(game.AppId, game.Name);
+            _ = LoadLocalArtworkAsync(game.AppId, game.Name);
+        }
         IsShareLoading = snapshot.SharingEnabled &&
                          (_latestHostStatus?.Game?.SessionId != snapshot.DetectedGame?.SessionId ||
                           _latestHostStatus?.CaptureState == CaptureState.Stabilizing);
+    }
+
+    private async Task LoadLocalArtworkAsync(uint appId, string name)
+    {
+        var image = await _artwork.GetArtworkAsync(appId, name);
+        if (_localArtworkAppId == appId)
+            LocalArtwork = image;
     }
 
     private void ShareButton_Click(object sender, RoutedEventArgs e)
@@ -248,40 +343,72 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         await RestartWatchAsync(card.Stream);
     }
 
-    private void SettingsButton_Click(object sender, RoutedEventArgs e) => OpenSettings();
+    private void HallNav_Checked(object sender, RoutedEventArgs e) =>
+        NavigateTo(AppPage.Hall);
 
-    private void DiagnosticsButton_Click(object sender, RoutedEventArgs e) =>
-        OpenDiagnostics();
+    private void SettingsNav_Checked(object sender, RoutedEventArgs e) =>
+        NavigateTo(AppPage.Settings);
+
+    private async void DiagnosticsNav_Checked(object sender, RoutedEventArgs e)
+    {
+        NavigateTo(AppPage.Diagnostics);
+        await _diagnosticsPage.RefreshIfNeededAsync();
+    }
+
+    private void HelpNav_Checked(object sender, RoutedEventArgs e) =>
+        NavigateTo(AppPage.Help);
+
+    private void NavigateTo(AppPage page)
+    {
+        if (HallPage is null ||
+            SettingsPage is null ||
+            DiagnosticsPage is null ||
+            HelpPage is null)
+        {
+            return;
+        }
+        HallPage.Visibility = page == AppPage.Hall ? Visibility.Visible : Visibility.Collapsed;
+        SettingsPage.Visibility = page == AppPage.Settings ? Visibility.Visible : Visibility.Collapsed;
+        DiagnosticsPage.Visibility = page == AppPage.Diagnostics ? Visibility.Visible : Visibility.Collapsed;
+        HelpPage.Visibility = page == AppPage.Help ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void ShowAndActivate()
+    {
+        if (!IsVisible)
+            Show();
+        if (WindowState == WindowState.Minimized)
+            WindowState = WindowState.Normal;
+        Activate();
+    }
 
     public void OpenSettings()
     {
-        if (_settingsWindow is { IsVisible: true })
-        {
-            _settingsWindow.Activate();
-            return;
-        }
-
-        _settingsWindow = _settingsFactory.Create();
-        _settingsWindow.Owner = this;
-        _settingsWindow.UninstallRequested += (_, _) =>
-            UninstallRequested?.Invoke(this, EventArgs.Empty);
-        _settingsWindow.Closed += (_, _) => _settingsWindow = null;
-        _settingsWindow.Show();
+        ShowAndActivate();
+        SettingsNav.IsChecked = true;
     }
 
     public void OpenDiagnostics()
     {
-        if (_diagnosticsWindow is { IsVisible: true })
-        {
-            _diagnosticsWindow.Activate();
-            return;
-        }
-
-        _diagnosticsWindow = _diagnosticsFactory.Create();
-        _diagnosticsWindow.Owner = this;
-        _diagnosticsWindow.Closed += (_, _) => _diagnosticsWindow = null;
-        _diagnosticsWindow.Show();
+        ShowAndActivate();
+        DiagnosticsNav.IsChecked = true;
     }
+
+    public void OpenHelp()
+    {
+        ShowAndActivate();
+        HelpNav.IsChecked = true;
+    }
+
+    private void MinimizeButton_Click(object sender, RoutedEventArgs e) =>
+        WindowState = WindowState.Minimized;
+
+    private void MaximizeButton_Click(object sender, RoutedEventArgs e) =>
+        WindowState = WindowState == WindowState.Maximized
+            ? WindowState.Normal
+            : WindowState.Maximized;
+
+    private void CloseButton_Click(object sender, RoutedEventArgs e) => Hide();
 
     private async Task RestartWatchAsync(FriendStream stream)
     {
@@ -394,6 +521,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         var cards = streams
             .Select(stream => new FriendCard(
                 stream,
+                _artwork,
                 IsActiveWatch(stream),
                 IsConnectingWatch(stream)))
             .ToArray();
@@ -409,6 +537,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     public async Task OpenWatchUriAsync(string uriText)
     {
+        ShowAndActivate();
+        HallNav.IsChecked = true;
         if (!Uri.TryCreate(uriText, UriKind.Absolute, out var uri) ||
             !uri.Scheme.Equals("palpeek", StringComparison.OrdinalIgnoreCase))
         {
@@ -497,6 +627,14 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
+internal enum AppPage
+{
+    Hall,
+    Settings,
+    Diagnostics,
+    Help
+}
+
 internal enum BannerKind
 {
     Status,
@@ -506,43 +644,75 @@ internal enum BannerKind
     Watch
 }
 
-public sealed class FriendCard
+public sealed class FriendCard : INotifyPropertyChanged
 {
     private readonly bool _isActive;
+    private ImageSource _artwork;
 
     public FriendCard(
         FriendStream stream,
+        GameArtworkService artwork,
         bool isActive = false,
         bool isConnecting = false)
     {
         Stream = stream;
         _isActive = isActive;
         IsConnecting = isConnecting;
+        var game = stream.Status.Game;
+        _artwork = artwork.CreatePlaceholder(game?.AppId ?? 0, game?.Name ?? "PALPEEK");
+        _ = LoadArtworkAsync(artwork);
     }
 
     public FriendStream Stream { get; }
     public string Nickname => Stream.Status.Nickname;
     public string GameName => Stream.Status.Game?.Name ?? "游戏已结束";
     public string WatchButtonText => IsConnecting
-        ? "正在连接，请勿反复点击"
+        ? "正在连接…"
         : _isActive
-            ? "正在观看，请勿反复点击"
-            : $"观看 {GameName}";
+            ? "正在观看"
+            : "立即观战";
+    public string QualityText => QualityLabel(Stream.Status.Quality);
+    public string ViewerText => $"{Stream.Status.ViewerCount}/{Protocol.MaxViewers} 人观看";
+    public string HostText =>
+        $"{Stream.Node.HostName} · PalPeek v{Stream.Status.Version}" +
+        (Stream.Status.CanWatch || string.IsNullOrWhiteSpace(Stream.Status.Message)
+            ? string.Empty
+            : $" · {Stream.Status.Message}");
     public string Detail =>
-        $"在线 · {QualityText(Stream.Status.Quality)} · {Stream.Status.ViewerCount}/{Protocol.MaxViewers} 人观看 · " +
+        $"在线 · {QualityLabel(Stream.Status.Quality)} · {Stream.Status.ViewerCount}/{Protocol.MaxViewers} 人观看 · " +
         $"{Stream.Node.HostName} · v{Stream.Status.Version}" +
         (Stream.Status.CanWatch || string.IsNullOrWhiteSpace(Stream.Status.Message)
             ? string.Empty
             : $" · 准备中：{Stream.Status.Message}");
     public bool CanWatch => Stream.Status.CanWatch && !_isActive;
     public bool IsConnecting { get; }
+    public ImageSource Artwork
+    {
+        get => _artwork;
+        private set
+        {
+            if (ReferenceEquals(_artwork, value))
+                return;
+            _artwork = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Artwork)));
+        }
+    }
 
-    private static string QualityText(StreamQuality quality) =>
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    private async Task LoadArtworkAsync(GameArtworkService artwork)
+    {
+        var game = Stream.Status.Game;
+        if (game is not null)
+            Artwork = await artwork.GetArtworkAsync(game.AppId, game.Name);
+    }
+
+    private static string QualityLabel(StreamQuality quality) =>
         quality switch
         {
-            StreamQuality.P720_30 => "720p30",
-            StreamQuality.P720_60 => "720p60",
-            StreamQuality.P1080_60 => "1080p60",
+            StreamQuality.P720_30 => "720P 30FPS",
+            StreamQuality.P720_60 => "720P 60FPS",
+            StreamQuality.P1080_60 => "1080P 60FPS",
             _ => "未知画质"
         };
 }
