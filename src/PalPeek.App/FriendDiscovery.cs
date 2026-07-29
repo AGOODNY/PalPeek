@@ -25,7 +25,8 @@ public sealed class FriendDiscovery : BackgroundService
     };
 
     private readonly ITailscaleService _tailscale;
-    private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(5) };
+    private readonly HttpClient _http =
+        PeerHttpClient.Create(TimeSpan.FromSeconds(5));
     private readonly ConcurrentDictionary<string, FriendStream> _active = new();
     private readonly ConcurrentDictionary<string, string> _reportedProtocolErrors = new();
     private readonly ConcurrentDictionary<string, byte> _reachableApis = new();

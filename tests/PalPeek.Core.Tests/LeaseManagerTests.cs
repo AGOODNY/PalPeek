@@ -1,4 +1,5 @@
 using PalPeek.Core;
+using System.Net;
 
 namespace PalPeek.Core.Tests;
 
@@ -63,5 +64,24 @@ public sealed class LeaseManagerTests
 
         Assert.Equal(Protocol.MaxViewers, accepted.Count(x => x));
         Assert.Equal(Protocol.MaxViewers, leases.Active("session").Count);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.RequestTimeout)]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    [InlineData(HttpStatusCode.BadGateway)]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    public void TransientHeartbeatFailuresAreRetried(HttpStatusCode statusCode)
+    {
+        Assert.True(PeerConnectionPolicy.IsTransientHeartbeatFailure(statusCode));
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.BadRequest)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.NotFound)]
+    public void PermanentHeartbeatFailuresEndTheLease(HttpStatusCode statusCode)
+    {
+        Assert.False(PeerConnectionPolicy.IsTransientHeartbeatFailure(statusCode));
     }
 }

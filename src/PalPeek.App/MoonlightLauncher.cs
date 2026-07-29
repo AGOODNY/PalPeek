@@ -17,10 +17,14 @@ public sealed class MoonlightLauncher
     private static readonly TimeSpan PairingProbeTimeout = TimeSpan.FromSeconds(8);
     private static readonly TimeSpan PairingPollInterval = TimeSpan.FromMilliseconds(100);
     private static readonly TimeSpan ApiRequestTimeout = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan HeartbeatRequestTimeout = TimeSpan.FromSeconds(3);
     private const int ReservationAttempts = 3;
     private readonly PalPeekOptions _options;
-    private readonly HttpClient _http = new() { Timeout = Timeout.InfiniteTimeSpan };
-    private readonly HttpClient _pairingHttp = new() { Timeout = Timeout.InfiniteTimeSpan };
+    private readonly HttpClient _http =
+        PeerHttpClient.Create(Timeout.InfiniteTimeSpan);
+    private readonly HttpClient _pairingHttp =
+        PeerHttpClient.Create(Timeout.InfiniteTimeSpan);
     private readonly object _diagnosticsGate = new();
     private WatchDiagnosticsSnapshot _diagnostics =
         new(false, false, false, false, null, null, DateTimeOffset.MinValue);
@@ -115,10 +119,18 @@ public sealed class MoonlightLauncher
             UpdatedAt = DateTimeOffset.UtcNow
         });
 
+        using var heartbeatCancellation =
+            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var heartbeat = HeartbeatAsync(
+            baseUrl,
+            lease.LeaseId,
+            heartbeatCancellation.Token);
         try
         {
             ReportProgress(progress, WatchStage.Pairing, "正在连接主播并检查配对…");
-            await EnsurePairedAsync(friend.Node.Ip, baseUrl, viewerId, cancellationToken);
+            await AwaitWithHeartbeatAsync(
+                EnsurePairedAsync(friend.Node.Ip, baseUrl, viewerId, cancellationToken),
+                heartbeat);
             UpdateDiagnostics(current => current with
             {
                 PairingSucceeded = true,
@@ -132,15 +144,10 @@ public sealed class MoonlightLauncher
                 UpdatedAt = DateTimeOffset.UtcNow
             });
             ReportProgress(progress, WatchStage.Streaming, "播放器已启动。");
-            using var heartbeatCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            var heartbeat = HeartbeatAsync(baseUrl, lease.LeaseId, heartbeatCancellation.Token);
             try
             {
                 var playerExit = moonlight.WaitForExitAsync(cancellationToken);
-                var completed = await Task.WhenAny(playerExit, heartbeat);
-                if (completed == heartbeat)
-                    await heartbeat;
-                await playerExit;
+                await AwaitWithHeartbeatAsync(playerExit, heartbeat);
             }
             catch
             {
@@ -152,16 +159,14 @@ public sealed class MoonlightLauncher
                 catch (InvalidOperationException) { }
                 throw;
             }
-            finally
-            {
-                heartbeatCancellation.Cancel();
-                try { await heartbeat; } catch (OperationCanceledException) { }
-            }
             if (moonlight.ExitCode != 0)
                 throw new InvalidOperationException($"播放器意外退出（代码 {moonlight.ExitCode}）。");
         }
         finally
         {
+            heartbeatCancellation.Cancel();
+            try { await heartbeat; } catch { }
+
             using var releaseTimeout = new CancellationTokenSource(ApiRequestTimeout);
             try
             {
@@ -171,6 +176,16 @@ public sealed class MoonlightLauncher
             }
             catch { }
         }
+    }
+
+    private static async Task AwaitWithHeartbeatAsync(
+        Task operation,
+        Task heartbeat)
+    {
+        var completed = await Task.WhenAny(operation, heartbeat);
+        if (completed == heartbeat)
+            await heartbeat;
+        await operation;
     }
 
     private async Task<HttpResponseMessage> ReserveAsync(
@@ -540,12 +555,39 @@ public sealed class MoonlightLauncher
     {
         while (!cancellationToken.IsCancellationRequested)
         {
-            await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
-            using var request = new HttpRequestMessage(
-                HttpMethod.Put, $"{baseUrl}/api/v1/reservations/{leaseId}/heartbeat");
-            using var response = await _http.SendAsync(request, cancellationToken);
-            if (!response.IsSuccessStatusCode)
+            await Task.Delay(HeartbeatInterval, cancellationToken);
+            using var timeout =
+                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(HeartbeatRequestTimeout);
+
+            HttpResponseMessage response;
+            try
+            {
+                using var request = new HttpRequestMessage(
+                    HttpMethod.Put,
+                    $"{baseUrl}/api/v1/reservations/{leaseId}/heartbeat");
+                response = await _http.SendAsync(request, timeout.Token);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                // A transient control-plane timeout must not tear down a healthy
+                // Moonlight media stream. The next heartbeat will retry.
+                continue;
+            }
+            catch (HttpRequestException)
+            {
+                continue;
+            }
+
+            using (response)
+            {
+                if (response.IsSuccessStatusCode)
+                    continue;
+                if (PeerConnectionPolicy.IsTransientHeartbeatFailure(response.StatusCode))
+                    continue;
+
                 throw await CreateApiException(response, cancellationToken);
+            }
         }
     }
 
