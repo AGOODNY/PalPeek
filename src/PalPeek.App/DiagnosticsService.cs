@@ -6,6 +6,7 @@ public enum DiagnosticLevel
 {
     Success,
     Failure,
+    Notice,
     Waiting
 }
 
@@ -19,6 +20,7 @@ public sealed record DiagnosticItem(
     {
         DiagnosticLevel.Success => "正常",
         DiagnosticLevel.Failure => "异常",
+        DiagnosticLevel.Notice => "提示",
         _ => "等待"
     };
 
@@ -26,6 +28,7 @@ public sealed record DiagnosticItem(
     {
         DiagnosticLevel.Success => "#2C8C68",
         DiagnosticLevel.Failure => "#C94F5D",
+        DiagnosticLevel.Notice => "#B7791F",
         _ => "#697386"
     };
 
@@ -145,21 +148,20 @@ public sealed class DiagnosticsService
                 $"正在等待可检测的 TCP {Protocol.ApiPort} 服务。",
                 "先确保双方设备在线并启动 PalPeek。");
         if (diagnostics.ReachableApiCount == 0)
-            return Failure(
+            return Notice(
                 "PalPeek API",
-                diagnostics.LastApiError ??
-                $"好友在线，但 TCP {Protocol.ApiPort} 无法访问。",
-                $"检查双方 Windows 防火墙、Tailnet ACL 和 TCP {Protocol.ApiPort}。");
+                $"{diagnostics.TailnetPeerCount} 台 Tailnet 设备当前均无法访问 PalPeek API，可能是设备关机、离线或未启动 PalPeek。",
+                $"如果目标设备确认在线且已启动 PalPeek，再检查防火墙、Tailnet ACL 和 TCP {Protocol.ApiPort}。");
 
         var detail = diagnostics.FailedApiCount == 0
             ? $"已连接 {diagnostics.ReachableApiCount} 台 PalPeek 设备。"
             : $"已连接 {diagnostics.ReachableApiCount} 台，另有 {diagnostics.FailedApiCount} 台无法访问。";
         return diagnostics.FailedApiCount == 0
             ? Success("PalPeek API", detail, "API 状态正常。")
-            : Failure(
+            : Notice(
                 "PalPeek API",
                 detail,
-                $"检查无法访问设备的防火墙和 TCP {Protocol.ApiPort}。");
+                $"这些设备可能已关机、离线或未启动 PalPeek；确认在线后仍无法连接，再检查防火墙和 TCP {Protocol.ApiPort}。");
     }
 
     private static DiagnosticItem ReservationItem(WatchDiagnosticsSnapshot watch)
@@ -227,16 +229,6 @@ public sealed class DiagnosticsService
                 $"已锁定《{sharing.DetectedGame.Name}》的可见游戏窗口。",
                 "请保持游戏窗口存在，不要关闭窗口。");
 
-        if (host.CaptureState == CaptureState.WindowUnavailable ||
-            runtime?.Capture == SunshineCaptureStatus.Error ||
-            sharing.DetectionMessage?.Contains(
-                "等待可捕获窗口",
-                StringComparison.Ordinal) == true)
-            return Failure(
-                "游戏窗口",
-                "检测到游戏进程，但未找到大于 320×200 的可见窗口。",
-                "恢复游戏主窗口并切到前台；如果游戏以管理员身份运行，请以管理员身份启动 PalPeek。");
-
         if (sharing.DetectionMessage?.Contains(
                 "权限",
                 StringComparison.Ordinal) == true)
@@ -244,6 +236,21 @@ public sealed class DiagnosticsService
                 "游戏窗口",
                 "游戏以管理员身份运行，PalPeek 权限不足。",
                 "关闭游戏与 PalPeek，然后以相同权限重新启动。");
+
+        if (runtime?.Capture == SunshineCaptureStatus.Error)
+            return Failure(
+                "游戏窗口",
+                runtime.Message ?? "Sunshine 无法捕获已锁定的游戏窗口。",
+                "恢复游戏主窗口并切到前台，然后停止并恢复分享。");
+
+        if (host.CaptureState == CaptureState.WindowUnavailable ||
+            sharing.DetectionMessage?.Contains(
+                "等待可捕获窗口",
+                StringComparison.Ordinal) == true)
+            return Notice(
+                "游戏窗口",
+                "检测到 Steam 进程，但暂未找到大于 320×200 的可见游戏窗口。",
+                "Wallpaper Engine 等 Steam 辅助程序可能没有可分享窗口；如要观战，请启动或恢复真正的游戏主窗口。");
 
         return Waiting(
             "游戏窗口",
@@ -366,6 +373,12 @@ public sealed class DiagnosticsService
         string summary,
         string action) =>
         new(name, DiagnosticLevel.Failure, summary, action);
+
+    private static DiagnosticItem Notice(
+        string name,
+        string summary,
+        string action) =>
+        new(name, DiagnosticLevel.Notice, summary, action);
 
     private static DiagnosticItem Waiting(
         string name,

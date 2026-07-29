@@ -13,7 +13,7 @@ public sealed class SunshineBridge : IHostedService, IAsyncDisposable
     private static readonly TimeSpan StartupTimeout = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(5);
-    private static readonly TimeSpan PairingTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan PairingTimeout = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan PairingRetryDelay = TimeSpan.FromMilliseconds(250);
     private readonly SemaphoreSlim _commandLock = new(1, 1);
     private readonly SemaphoreSlim _lifecycleLock = new(1, 1);
@@ -255,7 +255,7 @@ public sealed class SunshineBridge : IHostedService, IAsyncDisposable
                 {
                     throw new SunshineProtocolException(
                         "pairing_timeout",
-                        "Moonlight 配对请求在 30 秒内未到达，请重新点击观看游戏。");
+                        "Moonlight 配对请求在 60 秒内未到达，请重新点击观看游戏。");
                 }
                 await Task.Delay(
                     remaining < PairingRetryDelay ? remaining : PairingRetryDelay,

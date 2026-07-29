@@ -56,9 +56,10 @@ public partial class DiagnosticsWindow : Window, INotifyPropertyChanged
 
             var success = report.Items.Count(item => item.Level == DiagnosticLevel.Success);
             var failure = report.Items.Count(item => item.Level == DiagnosticLevel.Failure);
-            var waiting = report.Items.Count - success - failure;
+            var notice = report.Items.Count(item => item.Level == DiagnosticLevel.Notice);
+            var waiting = report.Items.Count - success - failure - notice;
             SummaryText =
-                $"{report.GeneratedAt:HH:mm:ss} · 正常 {success} · 异常 {failure} · 等待 {waiting}";
+                $"{report.GeneratedAt:HH:mm:ss} · 正常 {success} · 异常 {failure} · 提示 {notice} · 等待 {waiting}";
         }
         catch (Exception ex)
         {

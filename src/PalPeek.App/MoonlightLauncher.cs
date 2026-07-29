@@ -13,7 +13,7 @@ public sealed class MoonlightLauncher
     private const string SettingsFileName = "Moonlight.ini";
     private const string SettingsOrganizationDirectory =
         "Moonlight Game Streaming Project";
-    private static readonly TimeSpan PairingTimeout = TimeSpan.FromSeconds(45);
+    private static readonly TimeSpan PairingTimeout = TimeSpan.FromSeconds(75);
     private static readonly TimeSpan PairingProbeTimeout = TimeSpan.FromSeconds(8);
     private static readonly TimeSpan PairingPollInterval = TimeSpan.FromMilliseconds(100);
     private static readonly TimeSpan ApiRequestTimeout = TimeSpan.FromSeconds(10);

@@ -14,7 +14,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <DockPanel>
+        <DockPanel LastChildFill="False">
             <StackPanel>
                 <TextBlock Text="连接诊断" FontSize="28" FontWeight="Bold"/>
                 <TextBlock Text="逐项检查分享和观战链路，不会主动启动串流。"
@@ -22,7 +22,7 @@
             </StackPanel>
             <Button x:Name="RefreshButton" DockPanel.Dock="Right"
                     Content="刷新检查" Click="RefreshButton_Click"
-                    VerticalAlignment="Center"/>
+                    VerticalAlignment="Center" Width="100"/>
         </DockPanel>
 
         <Border Grid.Row="1" Background="#252B39" CornerRadius="8"
