@@ -50,6 +50,7 @@ public sealed class MoonlightCommandLineTests
         Assert.Equal(MoonlightCommandLine.AppName, arguments[2]);
         Assert.Equal("H.264", ValueAfter(arguments, "--video-codec"));
         Assert.Contains("--no-hdr", arguments);
+        Assert.Contains("--absolute-mouse", arguments);
         Assert.DoesNotContain("H264", arguments);
         Assert.DoesNotContain("--hdr", arguments);
         Assert.Equal("1024", ValueAfter(arguments, "--packet-size"));

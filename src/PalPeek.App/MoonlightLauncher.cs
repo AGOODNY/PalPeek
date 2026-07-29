@@ -16,8 +16,10 @@ public sealed class MoonlightLauncher
     private static readonly TimeSpan PairingTimeout = TimeSpan.FromSeconds(45);
     private static readonly TimeSpan PairingProbeTimeout = TimeSpan.FromSeconds(8);
     private static readonly TimeSpan PairingPollInterval = TimeSpan.FromMilliseconds(100);
+    private static readonly TimeSpan ApiRequestTimeout = TimeSpan.FromSeconds(10);
+    private const int ReservationAttempts = 3;
     private readonly PalPeekOptions _options;
-    private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(5) };
+    private readonly HttpClient _http = new() { Timeout = Timeout.InfiniteTimeSpan };
     private readonly HttpClient _pairingHttp = new() { Timeout = Timeout.InfiniteTimeSpan };
     private readonly object _diagnosticsGate = new();
     private WatchDiagnosticsSnapshot _diagnostics =
@@ -96,10 +98,11 @@ public sealed class MoonlightLauncher
         ReportProgress(progress, WatchStage.Reserving, "正在申请观看名额…");
         var baseUrl = $"http://{friend.Node.Ip}:{Protocol.ApiPort}";
         var viewerId = Environment.MachineName;
-        using var reserve = await _http.PostAsJsonAsync(
-            $"{baseUrl}/api/v1/reservations",
-            new ReservationRequest(Protocol.SchemaVersion, friend.Status.Game.SessionId,
-                viewerId, _options.Nickname),
+        using var reserve = await ReserveAsync(
+            baseUrl,
+            friend.Status.Game.SessionId,
+            viewerId,
+            progress,
             cancellationToken);
         if (!reserve.IsSuccessStatusCode)
             throw await CreateApiException(reserve, cancellationToken);
@@ -159,9 +162,78 @@ public sealed class MoonlightLauncher
         }
         finally
         {
-            try { await _http.DeleteAsync($"{baseUrl}/api/v1/reservations/{lease.LeaseId}", CancellationToken.None); }
+            using var releaseTimeout = new CancellationTokenSource(ApiRequestTimeout);
+            try
+            {
+                await _http.DeleteAsync(
+                    $"{baseUrl}/api/v1/reservations/{lease.LeaseId}",
+                    releaseTimeout.Token);
+            }
             catch { }
         }
+    }
+
+    private async Task<HttpResponseMessage> ReserveAsync(
+        string baseUrl,
+        string sessionId,
+        string viewerId,
+        IProgress<WatchProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        Exception? lastError = null;
+        for (var attempt = 1; attempt <= ReservationAttempts; attempt++)
+        {
+            if (attempt > 1)
+            {
+                ReportProgress(
+                    progress,
+                    WatchStage.Reserving,
+                    $"首次连接响应较慢，正在自动重试（{attempt}/{ReservationAttempts}）…");
+            }
+
+            using var timeout =
+                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(ApiRequestTimeout);
+            try
+            {
+                return await _http.PostAsJsonAsync(
+                    $"{baseUrl}/api/v1/reservations",
+                    new ReservationRequest(
+                        Protocol.SchemaVersion,
+                        sessionId,
+                        viewerId,
+                        _options.Nickname),
+                    timeout.Token);
+            }
+            catch (OperationCanceledException ex)
+                when (!cancellationToken.IsCancellationRequested)
+            {
+                lastError = ex;
+            }
+            catch (HttpRequestException ex)
+            {
+                lastError = ex;
+            }
+
+            if (attempt < ReservationAttempts)
+            {
+                await Task.Delay(
+                    TimeSpan.FromMilliseconds(500 * attempt),
+                    cancellationToken);
+            }
+        }
+
+        if (lastError is OperationCanceledException)
+        {
+            throw new TimeoutException(
+                $"连接好友超时，已自动尝试 {ReservationAttempts} 次。请确认双方 Tailscale 在线后再试。",
+                lastError);
+        }
+
+        throw new IOException(
+            $"无法连接好友的 PalPeek 服务，已自动尝试 {ReservationAttempts} 次。" +
+            "请检查 Tailscale、防火墙和 Tailnet ACL。",
+            lastError);
     }
 
     private void ResetDiagnostics()

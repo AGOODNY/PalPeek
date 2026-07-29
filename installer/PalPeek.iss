@@ -1,7 +1,10 @@
 #define MyAppName "PalPeek"
-#define MyAppVersion "0.3.0"
+#define MyAppVersion "0.3.1"
 #define MyAppPublisher "PalPeek 开源项目"
 #define MyAppExeName "PalPeek.exe"
+#ifndef PublishDir
+#define PublishDir "..\artifacts\publish"
+#endif
 
 [Setup]
 AppId={{CFBE7EF2-E0BB-4DBA-9418-28AE8D8D7F8D}
@@ -30,7 +33,7 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 
 [Files]
-Source: "..\artifacts\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\THIRD_PARTY.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion

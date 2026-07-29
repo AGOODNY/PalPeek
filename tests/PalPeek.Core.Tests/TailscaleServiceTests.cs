@@ -6,6 +6,26 @@ namespace PalPeek.Core.Tests;
 public sealed class TailscaleServiceTests
 {
     [Fact]
+    public async Task MissingExecutableResultIsCachedAndOnlyNotifiedOnce()
+    {
+        var missingExecutable = Path.Combine(
+            Path.GetTempPath(),
+            Guid.NewGuid().ToString("N"),
+            "tailscale.exe");
+        using var service = new TailscaleService(missingExecutable);
+        var notifications = 0;
+        service.SnapshotChanged += (_, _) => notifications++;
+
+        var first = await service.GetSnapshotAsync();
+        var second = await service.GetSnapshotAsync();
+
+        Assert.False(first.Running);
+        Assert.Equal("未安装 Tailscale。", first.Error);
+        Assert.Same(first, second);
+        Assert.Equal(1, notifications);
+    }
+
+    [Fact]
     public void ParsesSelfAndOnlinePeers()
     {
         const string json = """

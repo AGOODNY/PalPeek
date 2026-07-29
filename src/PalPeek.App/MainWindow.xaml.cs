@@ -25,6 +25,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private HostStatus? _latestHostStatus;
     private string _bannerText = string.Empty;
     private Visibility _bannerVisibility = Visibility.Collapsed;
+    private BannerKind _bannerKind;
+    private CancellationTokenSource? _bannerAutoHide;
     private CancellationTokenSource? _watchCancellation;
     private Task? _watchTask;
     private FriendStream? _activeWatch;
@@ -53,14 +55,17 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         _diagnosticsFactory = diagnosticsFactory;
         _discovery.Changed += Discovery_Changed;
         _discovery.ProbeFailed += Discovery_ProbeFailed;
+        _tailscale.SnapshotChanged += Tailscale_SnapshotChanged;
         _hostState.Changed += HostState_Changed;
         _sharing.Changed += Sharing_Changed;
         Loaded += async (_, _) => await RefreshNetworkAsync();
         Closed += (_, _) =>
         {
             _watchCancellation?.Cancel();
+            _bannerAutoHide?.Cancel();
             _discovery.Changed -= Discovery_Changed;
             _discovery.ProbeFailed -= Discovery_ProbeFailed;
+            _tailscale.SnapshotChanged -= Tailscale_SnapshotChanged;
             _hostState.Changed -= HostState_Changed;
             _sharing.Changed -= Sharing_Changed;
         };
@@ -127,11 +132,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         try
         {
             var snapshot = await _tailscale.GetSnapshotAsync();
-            NetworkStatus = snapshot.Running
-                ? $"Tailscale 已连接 · {snapshot.SelfIp}"
-                : snapshot.Error ?? "Tailscale 未连接";
-            if (!snapshot.Running)
-                ShowBanner(snapshot.Error ?? "请安装并连接 Tailscale。");
+            ApplyNetworkSnapshot(snapshot);
         }
         finally
         {
@@ -139,15 +140,36 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
     }
 
+    private void Tailscale_SnapshotChanged(object? sender, TailscaleSnapshot snapshot) =>
+        Dispatcher.Invoke(() => ApplyNetworkSnapshot(snapshot));
+
+    private void ApplyNetworkSnapshot(TailscaleSnapshot snapshot)
+    {
+        NetworkStatus = snapshot.Running
+            ? $"Tailscale 已连接 · {snapshot.SelfIp}"
+            : snapshot.Error ?? "Tailscale 未连接";
+        if (snapshot.Running)
+            HideBanner(BannerKind.Network);
+        else
+            ShowBanner(
+                snapshot.Error ?? "请安装并连接 Tailscale。",
+                BannerKind.Network);
+    }
+
     private void Discovery_Changed(object? sender, IReadOnlyList<FriendStream> streams) =>
         Dispatcher.Invoke(() =>
         {
             RefreshFriendCards(streams);
+            if (streams.Count > 0)
+                HideBanner(BannerKind.Discovery);
         });
 
     private void Discovery_ProbeFailed(object? sender, FriendDiscoveryError error) =>
         Dispatcher.Invoke(() =>
-            ShowBanner($"{error.Node.HostName}：{error.Message}"));
+            ShowBanner(
+                $"{error.Node.HostName}：{error.Message}",
+                BannerKind.Discovery,
+                TimeSpan.FromSeconds(12)));
 
     private void HostState_Changed(object? sender, HostStatus status) =>
         Dispatcher.Invoke(() =>
@@ -155,7 +177,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             _latestHostStatus = status;
             UpdateSharingUi(_sharing.Get());
             if (status.CaptureState is CaptureState.HostUnavailable or CaptureState.AudioUnavailable)
-                ShowBanner(status.Message ?? "捕获组件不可用。");
+                ShowBanner(status.Message ?? "捕获组件不可用。", BannerKind.Host);
+            else
+                HideBanner(BannerKind.Host);
         });
 
     private void Sharing_Changed(object? sender, SharingSnapshot snapshot) =>
@@ -195,16 +219,25 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         if (current.SharingEnabled)
         {
             _sharing.StopSharing();
-            ShowBanner("已停止分享，正在结束观战会话。");
+            ShowBanner(
+                "已停止分享，正在结束观战会话。",
+                BannerKind.Status,
+                TimeSpan.FromSeconds(5));
             return;
         }
 
         if (!_sharing.StartSharing())
         {
-            ShowBanner("请先启动一个 Steam 游戏，并等待 PalPeek 检测到游戏窗口。");
+            ShowBanner(
+                "请先启动一个 Steam 游戏，并等待 PalPeek 检测到游戏窗口。",
+                BannerKind.Status,
+                TimeSpan.FromSeconds(8));
             return;
         }
-        ShowBanner("已恢复分享当前游戏。");
+        ShowBanner(
+            "已恢复分享当前游戏。",
+            BannerKind.Status,
+            TimeSpan.FromSeconds(5));
     }
 
     private async void WatchButton_Click(object sender, RoutedEventArgs e)
@@ -305,7 +338,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
         catch (Exception ex)
         {
-            ShowBanner(ex.Message);
+            ShowBanner(
+                ex.Message,
+                BannerKind.Watch,
+                TimeSpan.FromSeconds(15));
         }
     }
 
@@ -342,9 +378,14 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         if (_activeWatch is null || !IsSameStream(_activeWatch, stream))
             return;
         _watchStage = progress.Stage;
-        ShowBanner(progress.Stage == WatchStage.Streaming
-            ? "播放器已启动。关闭播放器即可结束观看。"
-            : progress.Message);
+        ShowBanner(
+            progress.Stage == WatchStage.Streaming
+                ? "播放器已启动。关闭播放器即可结束观看。"
+                : progress.Message,
+            BannerKind.Watch,
+            progress.Stage == WatchStage.Streaming
+                ? TimeSpan.FromSeconds(5)
+                : null);
         RefreshFriendCards(_discovery.Current);
     }
 
@@ -371,7 +412,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         if (!Uri.TryCreate(uriText, UriKind.Absolute, out var uri) ||
             !uri.Scheme.Equals("palpeek", StringComparison.OrdinalIgnoreCase))
         {
-            ShowBanner("观战链接无效。");
+            ShowBanner(
+                "观战链接无效。",
+                BannerKind.Status,
+                TimeSpan.FromSeconds(10));
             return;
         }
 
@@ -390,16 +434,55 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             }
             await Task.Delay(750);
         }
-        ShowBanner("好友不在线，或观战链接已经失效。");
+        ShowBanner(
+            "好友不在线，或观战链接已经失效。",
+            BannerKind.Status,
+            TimeSpan.FromSeconds(10));
     }
 
-    private void ShowBanner(string message)
+    private void ShowBanner(
+        string message,
+        BannerKind kind = BannerKind.Status,
+        TimeSpan? autoHideAfter = null)
     {
+        _bannerAutoHide?.Cancel();
+        _bannerAutoHide?.Dispose();
+        _bannerAutoHide = null;
+        _bannerKind = kind;
         BannerText = message;
         BannerVisibility = Visibility.Visible;
+        if (autoHideAfter is null)
+            return;
+
+        var cancellation = new CancellationTokenSource();
+        _bannerAutoHide = cancellation;
+        _ = HideBannerAfterAsync(kind, autoHideAfter.Value, cancellation);
     }
 
-    private void HideBanner() => BannerVisibility = Visibility.Collapsed;
+    private async Task HideBannerAfterAsync(
+        BannerKind kind,
+        TimeSpan delay,
+        CancellationTokenSource cancellation)
+    {
+        try
+        {
+            await Task.Delay(delay, cancellation.Token);
+            await Dispatcher.InvokeAsync(() => HideBanner(kind));
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void HideBanner(BannerKind? kind = null)
+    {
+        if (kind is not null && _bannerKind != kind)
+            return;
+        _bannerAutoHide?.Cancel();
+        _bannerAutoHide?.Dispose();
+        _bannerAutoHide = null;
+        BannerVisibility = Visibility.Collapsed;
+    }
 
     private bool Set<T>(ref T field, T value, [CallerMemberName] string? name = null)
     {
@@ -412,6 +495,15 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private void OnPropertyChanged([CallerMemberName] string? name = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+}
+
+internal enum BannerKind
+{
+    Status,
+    Network,
+    Discovery,
+    Host,
+    Watch
 }
 
 public sealed class FriendCard

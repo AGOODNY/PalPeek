@@ -40,6 +40,7 @@ public static class MoonlightCommandLine
             "--packet-size", "1024",
             "--video-codec", "H.264",
             "--no-hdr",
+            "--absolute-mouse",
             "--display-mode", "windowed"
         ];
     }
