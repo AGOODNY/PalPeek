@@ -11,6 +11,9 @@ public sealed record TailscaleSnapshot(
     IReadOnlyList<NodeIdentity> Peers,
     string? Error)
 {
+    public IReadOnlyList<NodeIdentity> OnlinePeers =>
+        Peers.Where(peer => peer.Online).ToArray();
+
     public bool ContainsAddress(IPAddress? address)
     {
         if (address is null)

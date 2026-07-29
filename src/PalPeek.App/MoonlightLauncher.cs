@@ -320,7 +320,6 @@ public sealed class MoonlightLauncher
                 timeout.Token);
             await WaitForPairingCompletionAsync(
                 host,
-                existingCertificate,
                 pairing,
                 output,
                 timeout.Token);
@@ -346,47 +345,36 @@ public sealed class MoonlightLauncher
 
     private async Task WaitForPairingCompletionAsync(
         string host,
-        string? existingCertificate,
         Process pairing,
         StringBuilder output,
         CancellationToken cancellationToken)
     {
-        while (true)
+        // Do not stop Moonlight as soon as its local certificate appears. The host
+        // may still be committing the client certificate at that point, and starting
+        // a stream in that small window makes Sunshine reset the RTSP connection.
+        await pairing.WaitForExitAsync(cancellationToken);
+        pairing.WaitForExit(); // Flush asynchronous output handlers.
+        var detail = output.ToString().Trim();
+        if (pairing.ExitCode != 0)
         {
-            var certificate = ReadHostCertificate(host);
-            if (certificate is not null &&
-                (existingCertificate is null ||
-                 !string.Equals(
-                     certificate,
-                     existingCertificate,
-                     StringComparison.Ordinal)))
-            {
-                // Moonlight only persists the server certificate after the complete
-                // cryptographic pairing handshake succeeds.
+            throw new InvalidOperationException(
+                string.IsNullOrEmpty(detail)
+                    ? $"自动配对失败：Moonlight 退出代码 {pairing.ExitCode}。"
+                    : $"自动配对失败：{detail}");
+        }
+
+        // A successful pair command is followed by a live authenticated query.
+        // This verifies that Sunshine has accepted and persisted the client before
+        // the RTSP session is allowed to start.
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            if (await IsHostPairedAsync(host, cancellationToken))
                 return;
-            }
-
-            // A host reset may keep the same Sunshine certificate while losing its
-            // paired-client database. In that case, validate the new pairing against
-            // the live host instead of waiting for the certificate value to change.
-            if (existingCertificate is not null &&
-                await IsHostPairedAsync(host, cancellationToken))
-            {
-                return;
-            }
-
-            if (pairing.HasExited)
-            {
-                pairing.WaitForExit(); // Flush asynchronous output handlers.
-                var detail = output.ToString().Trim();
-                throw new InvalidOperationException(
-                    string.IsNullOrEmpty(detail)
-                        ? "自动配对失败：Moonlight 在保存配对凭据前退出。"
-                        : $"自动配对失败：{detail}");
-            }
-
             await Task.Delay(PairingPollInterval, cancellationToken);
         }
+
+        throw new InvalidOperationException(
+            "自动配对尚未在主播端生效，请稍候后重新点击观看。");
     }
 
     private async Task<bool> IsHostPairedAsync(

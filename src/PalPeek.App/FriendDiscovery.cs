@@ -25,7 +25,7 @@ public sealed class FriendDiscovery : BackgroundService
     };
 
     private readonly ITailscaleService _tailscale;
-    private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(2) };
+    private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(5) };
     private readonly ConcurrentDictionary<string, FriendStream> _active = new();
     private readonly ConcurrentDictionary<string, string> _reportedProtocolErrors = new();
     private readonly ConcurrentDictionary<string, byte> _reachableApis = new();
@@ -60,8 +60,9 @@ public sealed class FriendDiscovery : BackgroundService
         while (!stoppingToken.IsCancellationRequested)
         {
             var snapshot = await _tailscale.GetSnapshotAsync(stoppingToken);
-            var peerIds = snapshot.Peers.Select(x => x.Id).ToHashSet();
-            Volatile.Write(ref _tailnetPeerCount, snapshot.Peers.Count);
+            var onlinePeers = snapshot.OnlinePeers;
+            var peerIds = onlinePeers.Select(x => x.Id).ToHashSet();
+            Volatile.Write(ref _tailnetPeerCount, onlinePeers.Count);
             Interlocked.Exchange(
                 ref _updatedAtUtcTicks,
                 DateTimeOffset.UtcNow.UtcTicks);
@@ -72,7 +73,7 @@ public sealed class FriendDiscovery : BackgroundService
             foreach (var stale in _apiFailures.Keys.Where(x => !peerIds.Contains(x)))
                 _apiFailures.TryRemove(stale, out _);
 
-            await Task.WhenAll(snapshot.Peers.Select(peer => ProbeAsync(peer, stoppingToken)));
+            await Task.WhenAll(onlinePeers.Select(peer => ProbeAsync(peer, stoppingToken)));
             Changed?.Invoke(this, Current);
             await Task.Delay(TimeSpan.FromSeconds(3), stoppingToken);
         }

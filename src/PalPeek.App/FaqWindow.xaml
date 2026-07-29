@@ -28,18 +28,21 @@
                 <StackPanel>
                     <TextBlock Text="QUICK LINKS" Style="{StaticResource SectionLabelStyle}"
                                Margin="0,0,0,16"/>
-                    <Border Background="{StaticResource RaisedBrush}" CornerRadius="7"
-                            Padding="12" Margin="0,0,0,8">
-                        <TextBlock Text="看不到好友" FontWeight="SemiBold"/>
-                    </Border>
-                    <Border Background="{StaticResource RaisedBrush}" CornerRadius="7"
-                            Padding="12" Margin="0,0,0,8">
-                        <TextBlock Text="无法开始观战" FontWeight="SemiBold"/>
-                    </Border>
-                    <Border Background="{StaticResource RaisedBrush}" CornerRadius="7"
-                            Padding="12" Margin="0,0,0,8">
-                        <TextBlock Text="分享状态异常" FontWeight="SemiBold"/>
-                    </Border>
+                    <Button Content="看不到好友" Tag="看不到好友"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            HorizontalContentAlignment="Left"
+                            Margin="0,0,0,8"
+                            Click="QuickLink_Click"/>
+                    <Button Content="无法开始观战" Tag="无法开始观战"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            HorizontalContentAlignment="Left"
+                            Margin="0,0,0,8"
+                            Click="QuickLink_Click"/>
+                    <Button Content="分享状态异常" Tag="分享状态异常"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            HorizontalContentAlignment="Left"
+                            Margin="0,0,0,8"
+                            Click="QuickLink_Click"/>
                     <Border Margin="0,18,0,0" Background="#10251F"
                             BorderBrush="#245A49" BorderThickness="1"
                             CornerRadius="8" Padding="12">

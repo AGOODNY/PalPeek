@@ -13,17 +13,32 @@ public partial class FaqWindow : System.Windows.Controls.UserControl
         DocumentView.Document = LoadDocument();
     }
 
+    private void QuickLink_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.Button { Tag: string topic })
+            DocumentView.Document = CreateContactPlaceholder(topic);
+    }
+
+    private static FlowDocument CreateContactPlaceholder(string topic)
+    {
+        var document = CreateDocument();
+        document.Blocks.Add(new Paragraph(new Run($"Q. {topic}"))
+        {
+            FontWeight = FontWeights.SemiBold,
+            FontSize = 18,
+            Margin = new Thickness(0, 0, 0, 12)
+        });
+        document.Blocks.Add(new Paragraph(new Run("请联系作者"))
+        {
+            Foreground = new Media.SolidColorBrush(Media.Color.FromRgb(190, 198, 211)),
+            Margin = new Thickness(0)
+        });
+        return document;
+    }
+
     private static FlowDocument LoadDocument()
     {
-        var document = new FlowDocument
-        {
-            FontFamily = new Media.FontFamily("Microsoft YaHei UI"),
-            FontSize = 14,
-            Foreground = new Media.SolidColorBrush(Media.Color.FromRgb(244, 246, 250)),
-            Background = Media.Brushes.Transparent,
-            PagePadding = new Thickness(0),
-            LineHeight = 24
-        };
+        var document = CreateDocument();
         var path = Path.Combine(AppContext.BaseDirectory, "docs", "faq.md");
         if (!File.Exists(path))
         {
@@ -66,5 +81,16 @@ public partial class FaqWindow : System.Windows.Controls.UserControl
         }
         return document;
     }
+
+    private static FlowDocument CreateDocument() =>
+        new()
+        {
+            FontFamily = new Media.FontFamily("Microsoft YaHei UI"),
+            FontSize = 14,
+            Foreground = new Media.SolidColorBrush(Media.Color.FromRgb(244, 246, 250)),
+            Background = Media.Brushes.Transparent,
+            PagePadding = new Thickness(0),
+            LineHeight = 24
+        };
 
 }

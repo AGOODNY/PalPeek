@@ -1,5 +1,5 @@
 #define MyAppName "PalPeek"
-#define MyAppVersion "0.4.3"
+#define MyAppVersion "0.4.5"
 #define MyAppPublisher "PalPeek 开源项目"
 #define MyAppExeName "PalPeek.exe"
 #ifndef PublishDir
@@ -55,9 +55,12 @@ Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "PalPeek"; ValueData: """{app}\{#MyAppExeName}"" --background"; Flags: uninsdeletevalue
 
 [Run]
-Filename: "{cmd}"; Parameters: "/c netsh advfirewall firewall add rule name=""PalPeek Tailnet API"" dir=in action=allow program=""{app}\{#MyAppExeName}"" protocol=TCP localport=48191 remoteip=100.64.0.0/10,fd7a:115c:a1e0::/48 profile=any"; Flags: runhidden; StatusMsg: "正在配置 PalPeek 防火墙规则…"
-Filename: "{cmd}"; Parameters: "/c netsh advfirewall firewall add rule name=""PalPeek Host TCP"" dir=in action=allow protocol=TCP localport=47984,47989,47990,48010 remoteip=100.64.0.0/10,fd7a:115c:a1e0::/48 profile=any"; Flags: runhidden
-Filename: "{cmd}"; Parameters: "/c netsh advfirewall firewall add rule name=""PalPeek Host UDP"" dir=in action=allow protocol=UDP localport=47998-48000,48010 remoteip=100.64.0.0/10,fd7a:115c:a1e0::/48 profile=any"; Flags: runhidden
+Filename: "{cmd}"; Parameters: "/c netsh advfirewall firewall delete rule name=""PalPeek Tailnet API"""; Flags: runhidden; StatusMsg: "正在更新 PalPeek 防火墙规则…"
+Filename: "{cmd}"; Parameters: "/c netsh advfirewall firewall delete rule name=""PalPeek Host TCP"""; Flags: runhidden
+Filename: "{cmd}"; Parameters: "/c netsh advfirewall firewall delete rule name=""PalPeek Host UDP"""; Flags: runhidden
+Filename: "{cmd}"; Parameters: "/c netsh advfirewall firewall add rule name=""PalPeek Tailnet API"" dir=in action=allow enable=yes program=""{app}\{#MyAppExeName}"" protocol=TCP localport=48191 remoteip=100.64.0.0/10,fd7a:115c:a1e0::/48 profile=any"; Flags: runhidden
+Filename: "{cmd}"; Parameters: "/c netsh advfirewall firewall add rule name=""PalPeek Host TCP"" dir=in action=allow enable=yes protocol=TCP localport=47984,47989,47990,48010 remoteip=100.64.0.0/10,fd7a:115c:a1e0::/48 profile=any"; Flags: runhidden
+Filename: "{cmd}"; Parameters: "/c netsh advfirewall firewall add rule name=""PalPeek Host UDP"" dir=in action=allow enable=yes protocol=UDP localport=47998-48000,48010 remoteip=100.64.0.0/10,fd7a:115c:a1e0::/48 profile=any"; Flags: runhidden
 Filename: "{app}\{#MyAppExeName}"; Description: "启动 PalPeek"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]

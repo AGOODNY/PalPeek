@@ -142,7 +142,7 @@
                                            Foreground="{StaticResource SecondaryTextBrush}"
                                            FontSize="10" TextWrapping="Wrap"
                                            Margin="0,7,0,0"/>
-                                <TextBlock Text="PALPEEK v0.4.3"
+                                <TextBlock Text="PALPEEK v0.4.5"
                                            FontFamily="Bahnschrift"
                                            Foreground="{StaticResource MutedTextBrush}"
                                            FontSize="9" Margin="0,12,0,0"/>
@@ -419,10 +419,6 @@
                                     <TextBlock Text="观战仅传输游戏画面与音频，不提供远程控制"
                                                Foreground="{StaticResource MutedTextBrush}"
                                                FontSize="10" VerticalAlignment="Center"/>
-                                    <TextBlock Text="好友列表自动同步"
-                                               DockPanel.Dock="Right"
-                                               Foreground="{StaticResource SecondaryTextBrush}"
-                                               FontSize="10"/>
                                 </DockPanel>
                             </Border>
                         </Grid>

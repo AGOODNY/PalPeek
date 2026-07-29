@@ -24,6 +24,14 @@ public sealed record DiagnosticItem(
         _ => "等待"
     };
 
+    public string StatusIcon => Level switch
+    {
+        DiagnosticLevel.Success => "✓",
+        DiagnosticLevel.Notice => "?",
+        DiagnosticLevel.Failure => "×",
+        _ => "…"
+    };
+
     public string StatusColor => Level switch
     {
         DiagnosticLevel.Success => "#2C8C68",
@@ -130,11 +138,11 @@ public sealed class DiagnosticsService
         if (diagnostics.TailnetPeerCount == 0)
             return Waiting(
                 "好友发现",
-                "Tailscale 已连接，但没有发现其他 PalPeek 设备。",
+                "Tailscale 已连接，但没有发现其他在线设备。",
                 "确认好友在线、位于同一 Tailnet，并已启动 PalPeek。");
         return Success(
             "好友发现",
-            $"已发现 {diagnostics.TailnetPeerCount} 台 Tailnet 设备。",
+            $"已发现 {diagnostics.TailnetPeerCount} 台在线好友设备。",
             "如果目标好友未出现，请检查 Tailnet ACL 和设备在线状态。");
     }
 
@@ -150,7 +158,7 @@ public sealed class DiagnosticsService
         if (diagnostics.ReachableApiCount == 0)
             return Notice(
                 "PalPeek API",
-                $"{diagnostics.TailnetPeerCount} 台 Tailnet 设备当前均无法访问 PalPeek API，可能是设备关机、离线或未启动 PalPeek。",
+                $"{diagnostics.TailnetPeerCount} 台在线好友设备当前均无法访问 PalPeek API，可能是尚未启动 PalPeek。",
                 $"如果目标设备确认在线且已启动 PalPeek，再检查防火墙、Tailnet ACL 和 TCP {Protocol.ApiPort}。");
 
         var detail = diagnostics.FailedApiCount == 0

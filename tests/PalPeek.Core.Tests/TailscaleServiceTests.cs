@@ -43,6 +43,13 @@ public sealed class TailscaleServiceTests
               "DNSName": "bob.example.ts.net.",
               "TailscaleIPs": ["100.64.0.2"],
               "Online": true
+            },
+            "offline-node-key": {
+              "ID": "offline-peer",
+              "HostName": "charlie",
+              "DNSName": "charlie.example.ts.net.",
+              "TailscaleIPs": ["100.64.0.3"],
+              "Online": false
             }
           }
         }
@@ -52,7 +59,8 @@ public sealed class TailscaleServiceTests
 
         Assert.True(result.Running);
         Assert.Equal("100.64.0.1", result.SelfIp);
-        var peer = Assert.Single(result.Peers);
+        Assert.Equal(2, result.Peers.Count);
+        var peer = Assert.Single(result.OnlinePeers);
         Assert.Equal("bob.example.ts.net", peer.DnsName);
         Assert.True(peer.Online);
         Assert.True(result.ContainsAddress(IPAddress.Parse("100.64.0.1")));
