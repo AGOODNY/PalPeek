@@ -81,6 +81,25 @@ public sealed class SteamCatalog
             .FirstOrDefault();
     }
 
+    internal SteamApp? MatchExecutableName(string? executableName)
+    {
+        if (string.IsNullOrWhiteSpace(executableName))
+            return null;
+        var fileName = Path.GetFileName(executableName);
+        if (!fileName.Equals(executableName, StringComparison.Ordinal) ||
+            !fileName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var matches = _byInstallDirectory.Values
+            .Where(app => ContainsExecutable(app.InstallDirectory, fileName))
+            .Take(2)
+            .ToArray();
+        return matches.Length == 1 ? matches[0] : null;
+    }
+
+    internal SteamApp? FindByAppId(uint appId) =>
+        _byInstallDirectory.Values.FirstOrDefault(app => app.AppId == appId);
+
     internal static IReadOnlyList<KeyValuePair<string, string>> ParsePairs(string text) =>
         PairRegex.Matches(text)
             .Select(m => new KeyValuePair<string, string>(
@@ -107,6 +126,31 @@ public sealed class SteamCatalog
     private static bool IsUnder(string file, string directory) =>
         file.StartsWith(directory.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar,
             StringComparison.OrdinalIgnoreCase);
+
+    private static bool ContainsExecutable(string installDirectory, string fileName)
+    {
+        try
+        {
+            return Directory.EnumerateFiles(
+                    installDirectory,
+                    fileName,
+                    new EnumerationOptions
+                    {
+                        RecurseSubdirectories = true,
+                        IgnoreInaccessible = true,
+                        MatchCasing = MatchCasing.CaseInsensitive,
+                        AttributesToSkip =
+                            FileAttributes.Hidden |
+                            FileAttributes.System |
+                            FileAttributes.ReparsePoint
+                    })
+                .Any();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
 
     private static string Normalize(string path) =>
         Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);

@@ -81,6 +81,99 @@ public sealed class SteamGameDetectorTests : IDisposable
         Assert.Equal(200, ready.Game.ProcessId);
     }
 
+    [Fact]
+    public void DetectsApexThroughProtectedProcessCompatibilityMode()
+    {
+        var install = CreateGame("Apex Legends", 1172470);
+        File.WriteAllText(Path.Combine(install, "r5apex.exe"), string.Empty);
+        var processes = new FakeProcesses
+        {
+            Items =
+            [
+                new ProcessSnapshot(
+                    100,
+                    null,
+                    "r5apex.exe",
+                    ExecutablePathAccessDenied: true)
+            ]
+        };
+        var windows = new FakeWindows
+        {
+            Items = [new WindowCandidate(100, (nint)123, "Apex Legends", 1920 * 1080)],
+            Foreground = 100
+        };
+        var clock = new FakeTime();
+        var detector = new SteamGameDetector(
+            SteamCatalog.FromLibraries([_root]), processes, windows, clock);
+
+        var stabilizing = detector.Tick();
+        Assert.Equal(CaptureState.Stabilizing, stabilizing.State);
+        Assert.Contains("反作弊保护", stabilizing.Message);
+
+        clock.Advance(TimeSpan.FromSeconds(5));
+        var ready = detector.Tick();
+
+        Assert.Equal(CaptureState.Ready, ready.State);
+        Assert.Equal((uint)1172470, ready.Game!.AppId);
+        Assert.Equal("Apex Legends", ready.Game.Name);
+        Assert.Contains("兼容模式", ready.Message);
+    }
+
+    [Fact]
+    public void DoesNotGuessGameFromAmbiguousProtectedLauncher()
+    {
+        var first = CreateGame("First Unity Game", 101);
+        var second = CreateGame("Second Unity Game", 102);
+        File.WriteAllText(Path.Combine(first, "UnityCrashHandler64.exe"), string.Empty);
+        File.WriteAllText(Path.Combine(second, "UnityCrashHandler64.exe"), string.Empty);
+        var processes = new FakeProcesses
+        {
+            Items =
+            [
+                new ProcessSnapshot(
+                    100,
+                    null,
+                    "UnityCrashHandler64.exe",
+                    ExecutablePathAccessDenied: true)
+            ]
+        };
+        var windows = new FakeWindows
+        {
+            Items = [new WindowCandidate(100, (nint)123, "Protected Window", 1280 * 720)]
+        };
+        var detector = new SteamGameDetector(
+            SteamCatalog.FromLibraries([_root]), processes, windows, new FakeTime());
+
+        var result = detector.Tick();
+
+        Assert.Equal(CaptureState.WindowUnavailable, result.State);
+        Assert.Null(result.Game);
+        Assert.Contains("无法读取常规进程信息", result.Message);
+    }
+
+    [Fact]
+    public void ProcessSnapshotUsesPathFileNameWhenAvailable()
+    {
+        var snapshot = new ProcessSnapshot(
+            100,
+            @"C:\Steam\steamapps\common\ELDEN RING\Game\eldenring.exe");
+
+        Assert.Equal("eldenring.exe", snapshot.EffectiveExecutableName);
+    }
+
+    [Fact]
+    public void ProcessSourceReadsCurrentExecutableWithLimitedPermission()
+    {
+        var current = new ProcessSource()
+            .Snapshot()
+            .SingleOrDefault(process => process.ProcessId == Environment.ProcessId);
+
+        Assert.NotNull(current);
+        Assert.False(string.IsNullOrWhiteSpace(current.ExecutablePath));
+        Assert.True(Path.IsPathFullyQualified(current.ExecutablePath!));
+        Assert.False(current.ExecutablePathAccessDenied);
+    }
+
     private string CreateGame(
         string name = "Detector Game",
         uint appId = 99,

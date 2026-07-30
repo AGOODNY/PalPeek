@@ -239,7 +239,19 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         });
 
     private void Sharing_Changed(object? sender, SharingSnapshot snapshot) =>
-        Dispatcher.Invoke(() => UpdateSharingUi(snapshot));
+        Dispatcher.Invoke(() =>
+        {
+            UpdateSharingUi(snapshot);
+            if (snapshot.DetectionMessage?.Contains(
+                    "反作弊",
+                    StringComparison.Ordinal) == true)
+            {
+                ShowBanner(
+                    snapshot.DetectionMessage,
+                    BannerKind.Status,
+                    TimeSpan.FromSeconds(10));
+            }
+        });
 
     private void UpdateSharingUi(SharingSnapshot snapshot)
     {
@@ -257,15 +269,17 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         CanToggleShare = snapshot.DetectedGame is not null &&
                          snapshot.BlockReason is SharingBlockReason.None or
                              SharingBlockReason.ManuallyStopped;
-        LocalStatus = snapshot.DetectedGame is null
-            ? "没有运行中的游戏"
-            : snapshot.BlockReason switch
-            {
-                SharingBlockReason.Invisible => $"隐身中 · {snapshot.DetectedGame.Name} 不会显示给好友",
-                SharingBlockReason.GameDisabled => $"已始终禁止共享 {snapshot.DetectedGame.Name}",
-                SharingBlockReason.ManuallyStopped => $"已停止分享 {snapshot.DetectedGame.Name}",
-                _ => $"正在分享 {snapshot.DetectedGame.Name} · {_latestHostStatus?.ViewerCount ?? 0}/{Protocol.MaxViewers} 人观看"
-            };
+        LocalStatus = !string.IsNullOrWhiteSpace(snapshot.DetectionMessage)
+            ? snapshot.DetectionMessage
+            : snapshot.DetectedGame is null
+                ? "没有运行中的游戏"
+                : snapshot.BlockReason switch
+                {
+                    SharingBlockReason.Invisible => $"隐身中 · {snapshot.DetectedGame.Name} 不会显示给好友",
+                    SharingBlockReason.GameDisabled => $"已始终禁止共享 {snapshot.DetectedGame.Name}",
+                    SharingBlockReason.ManuallyStopped => $"已停止分享 {snapshot.DetectedGame.Name}",
+                    _ => $"正在分享 {snapshot.DetectedGame.Name} · {_latestHostStatus?.ViewerCount ?? 0}/{Protocol.MaxViewers} 人观看"
+                };
         LocalGameName = game?.Name ?? "等待 Steam 游戏";
         LocalShareState = game is null
             ? "未检测到游戏"
