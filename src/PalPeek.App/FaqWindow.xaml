@@ -28,6 +28,11 @@
                 <StackPanel>
                     <TextBlock Text="QUICK LINKS" Style="{StaticResource SectionLabelStyle}"
                                Margin="0,0,0,16"/>
+                    <Button Content="无法连接 tailnet" Tag="无法连接 tailnet"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            HorizontalContentAlignment="Left"
+                            Margin="0,0,0,8"
+                            Click="QuickLink_Click"/>
                     <Button Content="看不到好友" Tag="看不到好友"
                             Style="{StaticResource SecondaryButtonStyle}"
                             HorizontalContentAlignment="Left"

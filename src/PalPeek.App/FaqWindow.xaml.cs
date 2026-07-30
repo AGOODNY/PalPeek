@@ -16,7 +16,11 @@ public partial class FaqWindow : System.Windows.Controls.UserControl
     private void QuickLink_Click(object sender, RoutedEventArgs e)
     {
         if (sender is System.Windows.Controls.Button { Tag: string topic })
-            DocumentView.Document = CreateContactPlaceholder(topic);
+        {
+            DocumentView.Document = topic == "无法连接 tailnet"
+                ? LoadDocument()
+                : CreateContactPlaceholder(topic);
+        }
     }
 
     private static FlowDocument CreateContactPlaceholder(string topic)

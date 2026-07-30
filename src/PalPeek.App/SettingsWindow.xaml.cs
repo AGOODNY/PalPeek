@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 
 namespace PalPeek;
 
@@ -156,10 +157,9 @@ public partial class SettingsWindow : System.Windows.Controls.UserControl, INoti
         get => _saveStatus;
         private set
         {
-            if (_saveStatus == value)
-                return;
             _saveStatus = value;
             OnPropertyChanged();
+            RestartSaveStatusAnimation();
         }
     }
 
@@ -195,6 +195,15 @@ public partial class SettingsWindow : System.Windows.Controls.UserControl, INoti
         OnPropertyChanged(nameof(IsQuality72030));
         OnPropertyChanged(nameof(IsQuality72060));
         OnPropertyChanged(nameof(IsQuality108060));
+    }
+
+    private void RestartSaveStatusAnimation()
+    {
+        if (!IsInitialized || string.IsNullOrWhiteSpace(_saveStatus))
+            return;
+
+        var storyboard = (Storyboard)FindResource("SaveStatusStoryboard");
+        storyboard.Begin(this, HandoffBehavior.SnapshotAndReplace, isControllable: true);
     }
 
     private void OnPropertyChanged([CallerMemberName] string? name = null) =>
