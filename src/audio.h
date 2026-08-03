@@ -71,8 +71,14 @@ namespace audio {
   using buffer_t = util::buffer_t<std::uint8_t>;
   using packet_t = std::pair<void *, buffer_t>;
   using audio_ctx_ref_t = safe::shared_t<audio_ctx_t>::ptr_t;
+  using sample_sink_t = std::function<void(std::vector<float> &&)>;
 
-  void capture(safe::mail_t mail, config_t config, void *channel_data);
+  void capture(
+    safe::mail_t mail,
+    config_t config,
+    void *channel_data,
+    sample_sink_t sample_sink = {}
+  );
 
   /**
    * @brief Get the reference to the audio context.

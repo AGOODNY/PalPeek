@@ -128,7 +128,12 @@ namespace audio {
     }
   }
 
-  void capture(safe::mail_t mail, config_t config, void *channel_data) {
+  void capture(
+    safe::mail_t mail,
+    config_t config,
+    void *channel_data,
+    sample_sink_t sample_sink
+  ) {
     auto shutdown_event = mail->event<bool>(mail::shutdown);
     if (!config::audio.stream) {
       shutdown_event->view();
@@ -213,12 +218,20 @@ namespace audio {
     // Capture takes place on this thread
     platf::adjust_thread_priority(platf::thread_priority_e::critical);
 
-    auto samples = std::make_shared<sample_queue_t::element_type>(30);
-    std::thread thread {encodeThread, samples, config, channel_data};
+    std::shared_ptr<sample_queue_t::element_type> samples;
+    std::optional<std::thread> thread;
+    if (!sample_sink) {
+      samples = std::make_shared<sample_queue_t::element_type>(30);
+      thread.emplace(encodeThread, samples, config, channel_data);
+    }
 
     auto fg = util::fail_guard([&]() {
-      samples->stop();
-      thread.join();
+      if (samples) {
+        samples->stop();
+      }
+      if (thread && thread->joinable()) {
+        thread->join();
+      }
 
       shutdown_event->view();
     });
@@ -249,7 +262,11 @@ namespace audio {
           return;
       }
 
-      samples->raise(std::move(sample_buffer));
+      if (sample_sink) {
+        sample_sink(std::move(sample_buffer));
+      } else {
+        samples->raise(std::move(sample_buffer));
+      }
     }
   }
 

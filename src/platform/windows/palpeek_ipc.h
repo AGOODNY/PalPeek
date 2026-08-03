@@ -17,7 +17,7 @@
 #include <windows.h>
 
 namespace palpeek {
-  constexpr int protocol_version = 1;
+  constexpr int protocol_version = 2;
 
   struct capture_target_t {
     DWORD root_pid;

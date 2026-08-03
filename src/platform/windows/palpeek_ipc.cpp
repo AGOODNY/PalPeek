@@ -4,6 +4,7 @@
  */
 
 #include "palpeek_ipc.h"
+#include "palpeek_web_stream.h"
 
 #include <algorithm>
 #include <atomic>
@@ -112,6 +113,8 @@ namespace {
 
   nlohmann::json status_response() {
     const bool streaming = rtsp_stream::session_count() > 0;
+    const auto web_state = palpeek::web_stream::state();
+    const auto web_error = palpeek::web_stream::error();
     std::scoped_lock lock(state_mutex);
     const auto &active_error = !capture_error.code.empty()
       ? capture_error
@@ -122,10 +125,15 @@ namespace {
       {"capture", to_string(capture_state)},
       {"audio", to_string(audio_state)},
       {"encoding", streaming ? "streaming" : to_string(encoding_state)},
+      {"webStream", palpeek::web_stream::to_string(web_state)},
+      {"webStreamError", nullptr},
       {"target", nullptr},
       {"errorCode", active_error.code.empty() ? nlohmann::json(nullptr) : nlohmann::json(active_error.code)},
       {"message", active_error.message.empty() ? nlohmann::json(nullptr) : nlohmann::json(active_error.message)}
     };
+    if (!web_error.empty()) {
+      response["webStreamError"] = web_error;
+    }
     if (target) {
       response["target"] = {
         {"pid", target->root_pid},
@@ -154,14 +162,21 @@ namespace {
         return error_response("invalid_window", "The selected HWND is not a visible window owned by the target PID");
       }
 
-      std::scoped_lock lock(state_mutex);
-      if (target &&
-          target->root_pid == pid &&
-          target->hwnd == hwnd &&
-          target->session_id == request.value("sessionId", "")) {
-        return {{"ok", true}, {"generation", target->generation}};
+      {
+        std::scoped_lock lock(state_mutex);
+        if (target &&
+            target->root_pid == pid &&
+            target->hwnd == hwnd &&
+            target->session_id == request.value("sessionId", "")) {
+          return {{"ok", true}, {"generation", target->generation}};
+        }
       }
 
+      // A web stream is scoped to exactly one PalPeek game session. Stop the
+      // old output before accepting a different capture target.
+      palpeek::web_stream::stop_any();
+
+      std::scoped_lock lock(state_mutex);
       target = palpeek::capture_target_t {
         pid,
         hwnd,
@@ -183,6 +198,7 @@ namespace {
     }
 
     if (command == "clearTarget") {
+      palpeek::web_stream::stop_any();
       {
         std::scoped_lock lock(state_mutex);
         clear_target_locked();
@@ -192,21 +208,56 @@ namespace {
     }
 
     if (command == "stopSessions") {
+      palpeek::web_stream::stop_any();
       rtsp_stream::terminate_sessions();
       return {{"ok", true}};
     }
 
     if (command == "sessionEnded") {
+      const auto session_id = request.value("sessionId", "");
       {
         std::scoped_lock lock(state_mutex);
-        const auto session_id = request.value("sessionId", "");
         if (target && target->session_id != session_id) {
           return error_response("stale_session", "The capture target belongs to a different session");
         }
+      }
+      std::string web_error;
+      if (!palpeek::web_stream::stop(session_id, web_error)) {
+        return error_response("stale_session", web_error);
+      }
+      {
+        std::scoped_lock lock(state_mutex);
         clear_target_locked();
       }
       rtsp_stream::terminate_sessions();
       return {{"ok", true}};
+    }
+
+    if (command == "startWebStream") {
+      const auto session_id = request.value("sessionId", "");
+      {
+        std::scoped_lock lock(state_mutex);
+        if (!target || target->session_id != session_id) {
+          return error_response("stale_session", "The capture target belongs to a different session");
+        }
+      }
+      std::string web_error;
+      if (!palpeek::web_stream::start(
+            session_id,
+            request.value("quality", ""),
+            request.value("mediaPipe", ""),
+            web_error)) {
+        return error_response("web_stream_failed", web_error);
+      }
+      return {{"ok", true}, {"webStream", palpeek::web_stream::to_string(palpeek::web_stream::state())}};
+    }
+
+    if (command == "stopWebStream") {
+      std::string web_error;
+      if (!palpeek::web_stream::stop(request.value("sessionId", ""), web_error)) {
+        return error_response("stale_session", web_error);
+      }
+      return {{"ok", true}, {"webStream", "stopped"}};
     }
 
     if (command == "pair") {
@@ -230,6 +281,7 @@ namespace {
     }
 
     if (command == "shutdown") {
+      palpeek::web_stream::stop_any();
       std::thread([]() {
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
         lifetime::exit_sunshine(0, true);
@@ -342,6 +394,7 @@ namespace palpeek {
   }
 
   void stop_control_pipe() {
+    web_stream::stop_any();
     stopping.store(true);
     target_changed.notify_all();
     HANDLE wake = CreateFileA(

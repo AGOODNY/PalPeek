@@ -73,6 +73,8 @@ set(PLATFORM_TARGET_FILES
         "${CMAKE_SOURCE_DIR}/src/platform/windows/audio.cpp"
         "${CMAKE_SOURCE_DIR}/src/platform/windows/palpeek_ipc.cpp"
         "${CMAKE_SOURCE_DIR}/src/platform/windows/palpeek_ipc.h"
+        "${CMAKE_SOURCE_DIR}/src/platform/windows/palpeek_web_stream.cpp"
+        "${CMAKE_SOURCE_DIR}/src/platform/windows/palpeek_web_stream.h"
         "${CMAKE_SOURCE_DIR}/src/platform/windows/utf_utils.cpp"
         "${CMAKE_SOURCE_DIR}/src/platform/windows/utf_utils.h"
         "${CMAKE_SOURCE_DIR}/third-party/ViGEmClient/src/ViGEmClient.cpp"
