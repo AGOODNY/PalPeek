@@ -1,9 +1,12 @@
 #define MyAppName "PalPeek"
-#define MyAppVersion "0.4.8"
+#define MyAppVersion "0.5.0"
 #define MyAppPublisher "PalPeek 开源项目"
 #define MyAppExeName "PalPeek.exe"
 #ifndef PublishDir
 #define PublishDir "..\artifacts\publish"
+#endif
+#ifndef InstallerOutputDir
+#define InstallerOutputDir "..\artifacts\installer"
 #endif
 
 [Setup]
@@ -20,7 +23,7 @@ UsePreviousAppDir=yes
 CloseApplications=yes
 RestartApplications=no
 Uninstallable=yes
-OutputDir=..\artifacts\installer
+OutputDir={#InstallerOutputDir}
 OutputBaseFilename=PalPeek-Setup-{#MyAppVersion}-x64
 Compression=lzma2
 SolidCompression=yes

@@ -10,10 +10,12 @@ public sealed class SunshineProtocolTests
         const string json = """
             {
               "ok": true,
-              "protocolVersion": 1,
+              "protocolVersion": 2,
               "capture": "capturing",
               "audio": "ready",
               "encoding": "streaming",
+              "webStream": "streaming",
+              "webStreamError": null,
               "target": {
                 "pid": 42,
                 "hwnd": 123456,
@@ -30,6 +32,7 @@ public sealed class SunshineProtocolTests
         Assert.Equal(SunshineCaptureStatus.Capturing, status.Capture);
         Assert.Equal(SunshineAudioStatus.Ready, status.Audio);
         Assert.Equal(SunshineEncodingStatus.Streaming, status.Encoding);
+        Assert.Equal(SunshineWebStreamStatus.Streaming, status.WebStream);
         Assert.Equal(42, status.Target?.Pid);
         Assert.Equal(123456, status.Target?.Hwnd);
         Assert.Equal("session-1", status.Target?.SessionId);
@@ -61,10 +64,11 @@ public sealed class SunshineProtocolTests
         const string json = """
             {
               "ok": true,
-              "protocolVersion": 2,
+              "protocolVersion": 1,
               "capture": "idle",
               "audio": "idle",
               "encoding": "waitingForTarget",
+              "webStream": "stopped",
               "target": null
             }
             """;

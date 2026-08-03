@@ -25,6 +25,9 @@ public sealed class ConfigStore
                     JsonSerializer.Deserialize<PalPeekOptions>(File.ReadAllText(_path), JsonOptions)
                     ?? new PalPeekOptions();
                 loaded.BlockedGameAppIds ??= [];
+                loaded.BrowserSharing ??= new BrowserSharingOptions();
+                loaded.BrowserSharing.Invites ??= [];
+                loaded.BrowserSharing.LocalPort = Protocol.BrowserApiPort;
                 return loaded;
             }
         }

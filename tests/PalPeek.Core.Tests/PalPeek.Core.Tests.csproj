@@ -13,5 +13,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <ProjectReference Include="..\..\src\PalPeek.Core\PalPeek.Core.csproj" />
+    <Compile Include="..\..\src\PalPeek.App\WebMediaBuffer.cs" Link="App\WebMediaBuffer.cs" />
+    <Compile Include="..\..\src\PalPeek.App\WebMediaProtocol.cs" Link="App\WebMediaProtocol.cs" />
   </ItemGroup>
 </Project>

@@ -52,6 +52,15 @@ public sealed class HostMonitor : BackgroundService
             {
                 try
                 {
+                    if (_lastGame is not null &&
+                        _lastGame.SessionId != detection.Game.SessionId)
+                    {
+                        var old = _lastGame;
+                        _leases.ClearSession(old.SessionId);
+                        if (_sunshine.IsRunning)
+                            await _sunshine.EndSessionAsync(old.SessionId, stoppingToken);
+                        Publish("stream.unavailable", old);
+                    }
                     var host = await _sunshine.EnsureTargetAsync(detection.Game, stoppingToken);
                     captureState = MapCaptureState(host);
                     message = host.Message ?? detection.Message;

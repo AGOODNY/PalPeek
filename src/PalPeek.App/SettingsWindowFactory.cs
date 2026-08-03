@@ -10,6 +10,9 @@ public sealed class SettingsWindowFactory
     private readonly SharingControl _sharing;
     private readonly SteamCatalog _catalog;
     private readonly GameArtworkService _artwork;
+    private readonly WebInviteService _webInvites;
+    private readonly FunnelManager _funnel;
+    private readonly HostStateStore _hostState;
 
     public SettingsWindowFactory(
         PalPeekOptions options,
@@ -17,7 +20,10 @@ public sealed class SettingsWindowFactory
         StartupManager startup,
         SharingControl sharing,
         SteamCatalog catalog,
-        GameArtworkService artwork)
+        GameArtworkService artwork,
+        WebInviteService webInvites,
+        FunnelManager funnel,
+        HostStateStore hostState)
     {
         _options = options;
         _config = config;
@@ -25,8 +31,20 @@ public sealed class SettingsWindowFactory
         _sharing = sharing;
         _catalog = catalog;
         _artwork = artwork;
+        _webInvites = webInvites;
+        _funnel = funnel;
+        _hostState = hostState;
     }
 
     public SettingsWindow Create() =>
-        new(_options, _config, _startup, _sharing, _catalog, _artwork);
+        new(
+            _options,
+            _config,
+            _startup,
+            _sharing,
+            _catalog,
+            _artwork,
+            _webInvites,
+            _funnel,
+            _hostState);
 }

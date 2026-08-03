@@ -6,6 +6,7 @@ public static class Protocol
 {
     public const int SchemaVersion = 1;
     public const int ApiPort = 48191;
+    public const int BrowserApiPort = 48192;
     public const int MaxViewers = 3;
 }
 
@@ -15,6 +16,20 @@ public enum StreamQuality
     P720_30,
     P720_60,
     P1080_60
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum BrowserStreamQuality
+{
+    P720_30,
+    P720_60
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum ViewerTransport
+{
+    Moonlight,
+    Browser
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -57,7 +72,7 @@ public sealed record HostStatus(
 
 public static class BuildInfo
 {
-    public const string Version = "0.4.8";
+    public const string Version = "0.5.0";
 }
 
 public sealed record PairRequest(int SchemaVersion, string ClientId, string Pin);
@@ -90,4 +105,28 @@ public sealed class PalPeekOptions
     public bool Invisible { get; set; }
     public HashSet<uint> BlockedGameAppIds { get; set; } = [];
     public bool StartWithWindows { get; set; } = true;
+    public BrowserSharingOptions BrowserSharing { get; set; } = new();
+}
+
+public sealed class BrowserSharingOptions
+{
+    public bool Enabled { get; set; }
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public BrowserStreamQuality Quality { get; set; } = BrowserStreamQuality.P720_30;
+    public int LocalPort { get; set; } = Protocol.BrowserApiPort;
+    public int? FunnelPort { get; set; }
+    public string? FunnelHostName { get; set; }
+    public List<WebInvite> Invites { get; set; } = [];
+}
+
+public sealed class WebInvite
+{
+    public required string Id { get; set; }
+    public required string Name { get; set; }
+    public required string PasswordSalt { get; set; }
+    public required string PasswordHash { get; set; }
+    public int PasswordIterations { get; set; } = WebInvitePassword.Iterations;
+    public int CredentialVersion { get; set; } = 1;
+    public bool Enabled { get; set; } = true;
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

@@ -30,6 +30,35 @@ public sealed class LeaseManagerTests
     }
 
     [Fact]
+    public void BrowserAndMoonlightShareTheSameThreeViewerLimit()
+    {
+        var leases = new LeaseManager();
+        leases.Reserve("session", "moonlight-one", "One", ViewerTransport.Moonlight);
+        leases.Reserve("session", "browser-one", "Two", ViewerTransport.Browser);
+        leases.Reserve("session", "browser-two", "Three", ViewerTransport.Browser);
+
+        Assert.Throws<LeaseCapacityException>(() =>
+            leases.Reserve("session", "moonlight-two", "Four", ViewerTransport.Moonlight));
+        Assert.Equal(2, leases.Active("session").Count(x => x.Transport == ViewerTransport.Browser));
+    }
+
+    [Fact]
+    public void ExpiredBrowserLeaseReleasesCapacity()
+    {
+        var clock = new AdjustableTimeProvider();
+        var leases = new LeaseManager(clock);
+        leases.Reserve("session", "one", "One", ViewerTransport.Browser);
+        leases.Reserve("session", "two", "Two", ViewerTransport.Browser);
+        leases.Reserve("session", "three", "Three", ViewerTransport.Moonlight);
+
+        clock.Advance(TimeSpan.FromSeconds(16));
+
+        var replacement = leases.Reserve("session", "four", "Four", ViewerTransport.Browser);
+        Assert.Equal(ViewerTransport.Browser, replacement.Transport);
+        Assert.Single(leases.Active("session"));
+    }
+
+    [Fact]
     public void ClearingOneSessionLeavesOtherSessions()
     {
         var leases = new LeaseManager();
@@ -83,5 +112,12 @@ public sealed class LeaseManagerTests
     public void PermanentHeartbeatFailuresEndTheLease(HttpStatusCode statusCode)
     {
         Assert.False(PeerConnectionPolicy.IsTransientHeartbeatFailure(statusCode));
+    }
+
+    private sealed class AdjustableTimeProvider : TimeProvider
+    {
+        private DateTimeOffset _now = new(2026, 8, 3, 0, 0, 0, TimeSpan.Zero);
+        public override DateTimeOffset GetUtcNow() => _now;
+        public void Advance(TimeSpan duration) => _now += duration;
     }
 }

@@ -39,6 +39,14 @@ public enum SunshineEncodingStatus
     Error
 }
 
+public enum SunshineWebStreamStatus
+{
+    Stopped,
+    Starting,
+    Streaming,
+    Error
+}
+
 public sealed record SunshineTargetStatus(
     int Pid,
     long Hwnd,
@@ -50,6 +58,8 @@ public sealed record SunshineRuntimeStatus(
     SunshineCaptureStatus Capture,
     SunshineAudioStatus Audio,
     SunshineEncodingStatus Encoding,
+    SunshineWebStreamStatus WebStream,
+    string? WebStreamError,
     SunshineTargetStatus? Target,
     string? ErrorCode,
     string? Message);
@@ -70,7 +80,7 @@ public sealed class SunshineProtocolException : Exception
 
 public static class SunshineProtocol
 {
-    public const int Version = 1;
+    public const int Version = 2;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -93,6 +103,11 @@ public static class SunshineProtocol
             ReadEnum<SunshineCaptureStatus>(root, "capture"),
             ReadEnum<SunshineAudioStatus>(root, "audio"),
             ReadEnum<SunshineEncodingStatus>(root, "encoding"),
+            ReadEnum<SunshineWebStreamStatus>(root, "webStream"),
+            root.TryGetProperty("webStreamError", out var webStreamError) &&
+            webStreamError.ValueKind == JsonValueKind.String
+                ? webStreamError.GetString()
+                : null,
             root.TryGetProperty("target", out var target) && target.ValueKind != JsonValueKind.Null
                 ? JsonSerializer.Deserialize<SunshineTargetStatus>(target.GetRawText(), JsonOptions)
                 : null,

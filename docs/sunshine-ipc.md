@@ -7,7 +7,7 @@ PalPeek controls its Sunshine fork through the local Windows named pipe
 
 - The pipe accepts local clients only (`PIPE_REJECT_REMOTE_CLIENTS`).
 - Messages are UTF-8 JSON, one object per line, with a 16 KiB request limit.
-- Every request includes `"protocolVersion": 1`.
+- Every request includes `"protocolVersion": 2`.
 - The pipe does not expose keyboard, mouse, touch, pen, or controller commands.
 - A capture target is accepted only when the HWND exists, is visible, and is
   owned by the supplied PID.
@@ -20,7 +20,7 @@ Sets the only permitted video and audio source.
 
 ```json
 {
-  "protocolVersion": 1,
+  "protocolVersion": 2,
   "command": "setTarget",
   "pid": 1234,
   "hwnd": 5678,
@@ -36,15 +36,18 @@ Repeated requests for the same PID, HWND, and session are idempotent.
 
 ### `status`
 
-Returns the current target plus capture, process-audio, and encoder states.
+Returns the current target plus capture, process-audio, encoder, and shared
+browser-stream states.
 
 ```json
 {
   "ok": true,
-  "protocolVersion": 1,
+  "protocolVersion": 2,
   "capture": "targetReady",
   "audio": "idle",
   "encoding": "ready",
+  "webStream": "stopped",
+  "webStreamError": null,
   "target": {
     "pid": 1234,
     "hwnd": 5678,
@@ -59,6 +62,31 @@ Returns the current target plus capture, process-audio, and encoder states.
 Capture states are `idle`, `targetReady`, `capturing`, and `error`. Audio
 states are `idle`, `ready`, `capturing`, and `error`. Encoding states are
 `waitingForTarget`, `probing`, `ready`, `streaming`, and `error`.
+Browser-stream states are `stopped`, `starting`, `streaming`, and `error`.
+
+### `startWebStream`
+
+Starts the single shared H.264/AAC fragmented-MP4 browser output. The media
+pipe name is fixed so untrusted IPC clients cannot redirect encoded media.
+
+```json
+{
+  "protocolVersion": 2,
+  "command": "startWebStream",
+  "sessionId": "opaque-session-id",
+  "quality": "P720_30",
+  "mediaPipe": "PalPeekWebMedia"
+}
+```
+
+`quality` accepts `P720_30` or `P720_60`. The command rejects stale game
+sessions. The binary media pipe emits an initialization segment followed by
+keyframe-aligned one-second CMAF/fMP4 media segments.
+
+### `stopWebStream`
+
+Stops only the browser media output for the supplied game session. It does not
+terminate a simultaneous Moonlight session.
 
 ### `stopSessions`
 

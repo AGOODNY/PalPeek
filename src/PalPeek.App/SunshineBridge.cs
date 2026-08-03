@@ -287,6 +287,30 @@ public sealed class SunshineBridge : IHostedService, IAsyncDisposable
             sessionId
         }, cancellationToken);
 
+    public Task StartWebStreamAsync(
+        string sessionId,
+        BrowserStreamQuality quality,
+        string mediaPipe,
+        CancellationToken cancellationToken) =>
+        SendAsync(new
+        {
+            protocolVersion = SunshineProtocol.Version,
+            command = "startWebStream",
+            sessionId,
+            quality = quality.ToString(),
+            mediaPipe
+        }, cancellationToken);
+
+    public Task StopWebStreamAsync(
+        string sessionId,
+        CancellationToken cancellationToken) =>
+        SendAsync(new
+        {
+            protocolVersion = SunshineProtocol.Version,
+            command = "stopWebStream",
+            sessionId
+        }, cancellationToken);
+
     public async Task<SunshineRuntimeStatus> GetStatusAsync(
         CancellationToken cancellationToken = default)
     {

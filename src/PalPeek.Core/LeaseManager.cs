@@ -7,6 +7,7 @@ public sealed record ViewerLease(
     string SessionId,
     string ViewerId,
     string ViewerName,
+    ViewerTransport Transport,
     DateTimeOffset ExpiresAt);
 
 public sealed class LeaseManager
@@ -27,13 +28,18 @@ public sealed class LeaseManager
         }
     }
 
-    public ViewerLease Reserve(string sessionId, string viewerId, string viewerName)
+    public ViewerLease Reserve(
+        string sessionId,
+        string viewerId,
+        string viewerName,
+        ViewerTransport transport = ViewerTransport.Moonlight)
     {
         lock (_gate)
         {
             PruneCore();
             var existing = _leases.Values.FirstOrDefault(x =>
-                x.SessionId == sessionId && x.ViewerId == viewerId);
+                x.SessionId == sessionId && x.ViewerId == viewerId &&
+                x.Transport == transport);
             if (existing is not null)
                 return RenewCore(existing);
 
@@ -45,9 +51,19 @@ public sealed class LeaseManager
                 sessionId,
                 viewerId,
                 viewerName,
+                transport,
                 _clock.GetUtcNow() + LeaseDuration);
             _leases[lease.Id] = lease;
             return lease;
+        }
+    }
+
+    public ViewerLease? Find(string id)
+    {
+        lock (_gate)
+        {
+            PruneCore();
+            return _leases.TryGetValue(id, out var lease) ? lease : null;
         }
     }
 

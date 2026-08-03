@@ -39,6 +39,9 @@ public partial class App : System.Windows.Application
                 services.AddSingleton(sp => sp.GetRequiredService<ConfigStore>().Load());
                 services.AddSingleton<ITailscaleService, TailscaleService>();
                 services.AddSingleton<LeaseManager>();
+                services.AddSingleton<WebInviteService>();
+                services.AddSingleton<FunnelManager>();
+                services.AddSingleton<WebMediaBuffer>();
                 services.AddSingleton<EventHub>();
                 services.AddSingleton<HostStateStore>();
                 services.AddSingleton<SharingControl>();
@@ -50,6 +53,11 @@ public partial class App : System.Windows.Application
                 services.AddSingleton<SunshineBridge>();
                 services.AddHostedService(
                     sp => sp.GetRequiredService<SunshineBridge>());
+                services.AddSingleton<WebStreamCoordinator>();
+                services.AddHostedService(
+                    sp => sp.GetRequiredService<WebStreamCoordinator>());
+                services.AddHostedService<WebMediaPipeService>();
+                services.AddHostedService<BrowserWatchService>();
                 services.AddSingleton<MoonlightLauncher>();
                 services.AddSingleton<FriendDiscovery>();
                 services.AddSingleton(sp => SteamCatalog.Discover());

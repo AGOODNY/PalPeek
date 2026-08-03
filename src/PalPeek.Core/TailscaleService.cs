@@ -8,6 +8,7 @@ public sealed record TailscaleSnapshot(
     bool Running,
     string? SelfId,
     string? SelfIp,
+    string? SelfDnsName,
     IReadOnlyList<NodeIdentity> Peers,
     string? Error)
 {
@@ -164,7 +165,7 @@ public sealed class TailscaleService : ITailscaleService, IDisposable
     }
 
     private static TailscaleSnapshot Unavailable(string message) =>
-        new(false, null, null, Array.Empty<NodeIdentity>(), message);
+        new(false, null, null, null, Array.Empty<NodeIdentity>(), message);
 
     private static void TryStop(Process process)
     {
@@ -187,6 +188,7 @@ public sealed class TailscaleService : ITailscaleService, IDisposable
         var self = root.TryGetProperty("Self", out var selfNode) ? selfNode : default;
         var selfId = GetString(self, "ID");
         var selfIp = GetFirstIp(self);
+        var selfDnsName = (GetString(self, "DNSName") ?? string.Empty).TrimEnd('.');
         var peers = new List<NodeIdentity>();
 
         if (root.TryGetProperty("Peer", out var peerMap) && peerMap.ValueKind == JsonValueKind.Object)
@@ -206,7 +208,13 @@ public sealed class TailscaleService : ITailscaleService, IDisposable
             }
         }
 
-        return new(selfIp is not null, selfId, selfIp, peers, selfIp is null ? "Tailscale 未连接。" : null);
+        return new(
+            selfIp is not null,
+            selfId,
+            selfIp,
+            string.IsNullOrWhiteSpace(selfDnsName) ? null : selfDnsName,
+            peers,
+            selfIp is null ? "Tailscale 未连接。" : null);
     }
 
     private static string FindExecutable()

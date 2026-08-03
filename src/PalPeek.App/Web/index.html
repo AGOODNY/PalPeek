@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>PalPeek 网页观战</title>
+  <link rel="stylesheet" href="/web/app.css">
+  <script defer src="/web/hls.min.js"></script>
+  <script defer src="/web/app.js"></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="brand">
+      <span class="brand-mark" aria-hidden="true">P</span>
+      <div>
+        <strong>PALPEEK</strong>
+        <span>网页观战</span>
+      </div>
+      <span id="connectionBadge" class="badge">等待连接</span>
+    </header>
+
+    <section id="loginPanel" class="panel auth-panel">
+      <p class="eyebrow">PRIVATE WATCH LINK</p>
+      <h1>输入口令加入观战</h1>
+      <p class="muted">此链接由主播本人创建。PalPeek 只传输指定游戏窗口和游戏进程音频，不提供远程控制。</p>
+      <form id="loginForm">
+        <label for="viewerName">你的昵称</label>
+        <input id="viewerName" name="viewerName" maxlength="24" autocomplete="nickname" required placeholder="观众昵称">
+        <label for="password">观战口令</label>
+        <input id="password" name="password" type="password" minlength="8" maxlength="128" autocomplete="current-password" required placeholder="输入主播提供的口令">
+        <button id="loginButton" type="submit">验证并进入</button>
+      </form>
+      <p id="loginError" class="error" role="alert"></p>
+    </section>
+
+    <section id="watchPanel" class="watch-panel" hidden>
+      <div class="video-frame">
+        <video id="player" playsinline controls></video>
+        <div id="videoOverlay" class="video-overlay">
+          <div class="pulse" aria-hidden="true"></div>
+          <h2 id="overlayTitle">等待主播开播</h2>
+          <p id="overlayDetail">页面会自动检查直播状态。</p>
+          <button id="watchButton" type="button" hidden>开始观战</button>
+        </div>
+      </div>
+      <div class="stream-info panel">
+        <div>
+          <p class="eyebrow">NOW PLAYING</p>
+          <h1 id="gameName">尚未开播</h1>
+          <p id="hostName" class="muted">正在获取主播状态…</p>
+        </div>
+        <dl>
+          <div><dt>画质</dt><dd id="quality">—</dd></div>
+          <div><dt>观众</dt><dd id="viewerCount">—</dd></div>
+          <div><dt>延迟</dt><dd>约 2–5 秒</dd></div>
+        </dl>
+      </div>
+      <p id="watchError" class="error" role="alert"></p>
+    </section>
+
+    <footer>请勿转发链接或口令 · 关闭页面会自动释放观战名额</footer>
+  </main>
+</body>
+</html>

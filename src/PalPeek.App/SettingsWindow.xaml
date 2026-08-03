@@ -203,6 +203,26 @@
                     </Expander>
                 </Border>
 
+                <TextBlock Text="WEB WATCH / 网页观战" Style="{StaticResource SectionLabelStyle}"
+                           Margin="0,10,0,10"/>
+                <Border Style="{StaticResource SettingsCardStyle}" BorderBrush="#245A50">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="浏览器链接观战" FontSize="17" FontWeight="SemiBold"/>
+                            <TextBlock Text="创建固定链接和口令，让任意系统的现代浏览器通过 Tailscale Funnel 观看。"
+                                       Foreground="{StaticResource SecondaryTextBrush}"
+                                       TextWrapping="Wrap" Margin="0,5,24,0"/>
+                        </StackPanel>
+                        <Button Grid.Column="1" Content="管理网页观战…"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Click="BrowserWatchButton_Click" VerticalAlignment="Center"/>
+                    </Grid>
+                </Border>
+
                 <TextBlock Text="SYSTEM / 系统" Style="{StaticResource SectionLabelStyle}"
                            Margin="0,10,0,10"/>
                 <Border Style="{StaticResource SettingsCardStyle}">
