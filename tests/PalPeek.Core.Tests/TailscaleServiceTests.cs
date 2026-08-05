@@ -67,4 +67,26 @@ public sealed class TailscaleServiceTests
         Assert.True(result.ContainsAddress(IPAddress.Parse("::ffff:100.64.0.2")));
         Assert.False(result.ContainsAddress(IPAddress.Parse("100.64.0.99")));
     }
+
+    [Fact]
+    public void ParsesStoppedBackendAsActionableChineseError()
+    {
+        const string json = """
+            {
+              "BackendState": "NoState",
+              "Self": {
+                "ID": "",
+                "TailscaleIPs": null,
+                "Online": false
+              },
+              "Health": ["Tailscale is stopped."]
+            }
+            """;
+
+        var result = TailscaleService.Parse(json);
+
+        Assert.False(result.Running);
+        Assert.Contains("Tailscale 当前已停止", result.Error);
+        Assert.Contains("已连接", result.Error);
+    }
 }

@@ -185,6 +185,7 @@ public sealed class TailscaleService : ITailscaleService, IDisposable
     {
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
+        var backendState = GetString(root, "BackendState");
         var self = root.TryGetProperty("Self", out var selfNode) ? selfNode : default;
         var selfId = GetString(self, "ID");
         var selfIp = GetFirstIp(self);
@@ -208,13 +209,23 @@ public sealed class TailscaleService : ITailscaleService, IDisposable
             }
         }
 
+        var error = selfIp is null
+            ? backendState switch
+            {
+                "NoState" or "Stopped" =>
+                    "Tailscale 当前已停止。请先打开 Tailscale，确认已经登录并显示“已连接”。",
+                "NeedsLogin" => "Tailscale 尚未登录。请先登录 Tailscale。",
+                _ => "Tailscale 未连接。"
+            }
+            : null;
+
         return new(
             selfIp is not null,
             selfId,
             selfIp,
             string.IsNullOrWhiteSpace(selfDnsName) ? null : selfDnsName,
             peers,
-            selfIp is null ? "Tailscale 未连接。" : null);
+            error);
     }
 
     private static string FindExecutable()

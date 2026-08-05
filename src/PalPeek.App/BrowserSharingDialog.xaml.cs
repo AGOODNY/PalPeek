@@ -105,11 +105,11 @@ public partial class BrowserSharingPage : System.Windows.Controls.UserControl, I
             }
             catch (Exception ex)
             {
-                WpfMessageBox.Show(ex.Message, "无法开启网页观战", MessageBoxButton.OK, MessageBoxImage.Error);
                 _loading = true;
                 EnabledCheckBox.IsChecked = false;
                 _loading = false;
                 SetBusy(false, string.Empty);
+                WpfMessageBox.Show(ex.Message, "无法开启网页观战", MessageBoxButton.OK, MessageBoxImage.Error);
                 await RefreshFunnelAsync();
                 return;
             }
