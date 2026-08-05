@@ -31,9 +31,20 @@
                         <TextBlock Text="启用后，当前允许分享的游戏会自动开放给通过口令验证的观众。"
                                    Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap" Margin="0,5,20,0"/>
                     </StackPanel>
-                    <CheckBox x:Name="EnabledCheckBox" Grid.Column="1" Content="已开启"
-                              Style="{StaticResource ToggleSwitchStyle}" Click="EnabledCheckBox_Click"
-                              VerticalAlignment="Center"/>
+                    <CheckBox x:Name="EnabledCheckBox" Grid.Column="1" Click="EnabledCheckBox_Click"
+                              VerticalAlignment="Center">
+                        <CheckBox.Style>
+                            <Style TargetType="CheckBox" BasedOn="{StaticResource ToggleSwitchStyle}">
+                                <Setter Property="Content" Value="已关闭"/>
+                                <Style.Triggers>
+                                    <Trigger Property="IsChecked" Value="True">
+                                        <Setter Property="Content" Value="已开启"/>
+                                        <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </CheckBox.Style>
+                    </CheckBox>
                 </Grid>
                 <Separator Margin="0,16" Background="{StaticResource BorderBrush}"/>
                 <Grid>

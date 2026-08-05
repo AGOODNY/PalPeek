@@ -119,7 +119,9 @@ public sealed class BrowserWatchService : BackgroundService
             string inviteId,
             WebAuthRequest request) =>
         {
-            if (!_options.BrowserSharing.Enabled || request.InviteId != inviteId)
+            if (!_options.BrowserSharing.Enabled)
+                return WatchingDisabled();
+            if (request.InviteId != inviteId)
                 return InvalidCredentials();
             WebAuthSession? session;
             try
@@ -142,6 +144,16 @@ public sealed class BrowserWatchService : BackgroundService
             });
             return Results.Ok(new { authenticated = true, viewerName = session.ViewerName });
         }).RequireRateLimiting("web-auth");
+
+        app.MapGet("/api/web/v1/auth", (HttpContext context) =>
+        {
+            var session = Authenticate(context);
+            return Results.Ok(new
+            {
+                authenticated = session is not null,
+                viewerName = session?.ViewerName
+            });
+        });
 
         app.MapDelete("/api/web/v1/auth", (HttpContext context) =>
         {
@@ -330,6 +342,10 @@ public sealed class BrowserWatchService : BackgroundService
     private static IResult InvalidCredentials() => Results.Json(
         new { code = "invalid_credentials", message = "链接或口令无效。" },
         statusCode: StatusCodes.Status401Unauthorized);
+
+    private static IResult WatchingDisabled() => Results.Json(
+        new { code = "watching_disabled", message = "主播尚未开启网页观战。" },
+        statusCode: StatusCodes.Status403Forbidden);
 
     private static string AuthPartition(HttpContext context)
     {

@@ -210,6 +210,11 @@
       return;
     }
     try {
+      const auth = await jsonFetch('/api/web/v1/auth');
+      if (!auth.authenticated) {
+        showLogin();
+        return;
+      }
       loginPanel.hidden = true;
       watchPanel.hidden = false;
       await refreshStatus();
