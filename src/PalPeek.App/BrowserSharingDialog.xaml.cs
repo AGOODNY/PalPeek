@@ -1,5 +1,6 @@
 using PalPeek.Core;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using WpfButton = System.Windows.Controls.Button;
@@ -26,6 +27,8 @@ public partial class BrowserSharingPage : System.Windows.Controls.UserControl, I
     private readonly FunnelManager _funnel;
     private readonly HostStateStore _hostState;
     private CancellationTokenSource? _funnelCancellation;
+    private Uri? _authorizationUri;
+    private bool _authorizationOpened;
     private bool _loading;
 
     public BrowserSharingPage(
@@ -92,14 +95,17 @@ public partial class BrowserSharingPage : System.Windows.Controls.UserControl, I
             try
             {
                 _funnelCancellation = new CancellationTokenSource();
-                SetBusy(true, "正在配置 Tailscale Funnel，请完成浏览器中的授权…", canCancel: true);
-                await EnableFunnelWithChoiceAsync(_funnelCancellation.Token);
+                var progress = PrepareFunnelAuthorization();
+                SetBusy(true, "正在请求 Tailscale Funnel 授权…", canCancel: true);
+                await EnableFunnelWithChoiceAsync(_funnelCancellation.Token, progress);
+                ClearFunnelAuthorization();
             }
             catch (OperationCanceledException)
             {
                 _loading = true;
                 EnabledCheckBox.IsChecked = false;
                 _loading = false;
+                ClearFunnelAuthorization();
                 SetBusy(false, "已取消配置公网入口。");
                 return;
             }
@@ -136,13 +142,16 @@ public partial class BrowserSharingPage : System.Windows.Controls.UserControl, I
         try
         {
             _funnelCancellation = new CancellationTokenSource();
-            SetBusy(true, "正在配置 Tailscale Funnel，请完成浏览器中的授权…", canCancel: true);
-            await EnableFunnelWithChoiceAsync(_funnelCancellation.Token);
+            var progress = PrepareFunnelAuthorization();
+            SetBusy(true, "正在请求 Tailscale Funnel 授权…", canCancel: true);
+            await EnableFunnelWithChoiceAsync(_funnelCancellation.Token, progress);
+            ClearFunnelAuthorization();
             SetBusy(false, "公网入口已就绪。");
             ReloadInvites();
         }
         catch (OperationCanceledException)
         {
+            ClearFunnelAuthorization();
             SetBusy(false, "已取消配置公网入口。");
         }
         catch (Exception ex)
@@ -280,7 +289,9 @@ public partial class BrowserSharingPage : System.Windows.Controls.UserControl, I
         ReloadInvites();
     }
 
-    private async Task<FunnelState> EnableFunnelWithChoiceAsync(CancellationToken cancellationToken)
+    private async Task<FunnelState> EnableFunnelWithChoiceAsync(
+        CancellationToken cancellationToken,
+        IProgress<FunnelProgress> progress)
     {
         var state = await _funnel.GetStateAsync(cancellationToken);
         if (state.Configured)
@@ -315,7 +326,71 @@ public partial class BrowserSharingPage : System.Windows.Controls.UserControl, I
                     MessageBoxResult.No) != MessageBoxResult.Yes)
                 throw new OperationCanceledException("已取消配置公网入口。");
         }
-        return await _funnel.EnableAsync(selected, cancellationToken);
+        return await _funnel.EnableAsync(selected, cancellationToken, progress);
+    }
+
+    private IProgress<FunnelProgress> PrepareFunnelAuthorization()
+    {
+        _authorizationUri = null;
+        _authorizationOpened = false;
+        OpenAuthorizationButton.Visibility = Visibility.Collapsed;
+        return new Progress<FunnelProgress>(OnFunnelProgress);
+    }
+
+    private void OnFunnelProgress(FunnelProgress progress)
+    {
+        StatusText.Text = progress.Message;
+        if (progress.AuthorizationUri is null)
+            return;
+
+        _authorizationUri = progress.AuthorizationUri;
+        OpenAuthorizationButton.Visibility = Visibility.Visible;
+        if (_authorizationOpened)
+            return;
+
+        _authorizationOpened = TryOpenAuthorizationPage(progress.AuthorizationUri);
+        StatusText.Text = _authorizationOpened
+            ? "已打开 Tailscale 授权页面。完成授权后请返回 PalPeek；如果浏览器没有出现，请点击“打开授权页面”。"
+            : "无法自动打开浏览器，请点击“打开授权页面”完成 Tailscale 授权。";
+    }
+
+    private void OpenAuthorizationButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_authorizationUri is null)
+            return;
+        _authorizationOpened = TryOpenAuthorizationPage(_authorizationUri);
+        if (!_authorizationOpened)
+        {
+            WpfMessageBox.Show(
+                "无法调用系统默认浏览器。请检查 Windows 的默认浏览器设置，然后重试。",
+                "无法打开授权页面",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
+    private static bool TryOpenAuthorizationPage(Uri authorizationUri)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = authorizationUri.AbsoluteUri,
+                UseShellExecute = true
+            });
+            return true;
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    private void ClearFunnelAuthorization()
+    {
+        _authorizationUri = null;
+        _authorizationOpened = false;
+        OpenAuthorizationButton.Visibility = Visibility.Collapsed;
     }
 
     private void Invites_Changed(object? sender, EventArgs e) => Dispatcher.Invoke(ReloadInvites);

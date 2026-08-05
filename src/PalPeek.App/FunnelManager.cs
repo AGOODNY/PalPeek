@@ -1,5 +1,6 @@
 using PalPeek.Core;
 using System.Diagnostics;
+using System.Text;
 
 namespace PalPeek;
 
@@ -10,10 +11,13 @@ public sealed record FunnelState(
     string Message,
     IReadOnlyList<int> OccupiedPorts);
 
+public sealed record FunnelProgress(string Message, Uri? AuthorizationUri = null);
+
 public sealed class FunnelManager
 {
     private static readonly int[] PublicPorts = [443, 8443, 10000];
-    private static readonly TimeSpan CommandTimeout = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan AuthorizationTimeout = TimeSpan.FromMinutes(5);
     private readonly PalPeekOptions _options;
     private readonly ConfigStore _config;
     private readonly ITailscaleService _tailscale;
@@ -84,7 +88,8 @@ public sealed class FunnelManager
 
     public async Task<FunnelState> EnableAsync(
         int? preferredPort = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IProgress<FunnelProgress>? progress = null)
     {
         var current = await GetStateAsync(cancellationToken);
         if (current.Configured)
@@ -100,11 +105,37 @@ public sealed class FunnelManager
         if (port == 0)
             throw new InvalidOperationException("Funnel 的 443、8443 和 10000 端口均已被其他服务占用。");
 
+        Uri? authorizationUri = null;
+        var authorizationGate = new object();
+        progress?.Report(new FunnelProgress("正在请求 Tailscale Funnel 授权…"));
         var result = await RunAsync(
             ["funnel", "--bg", "--yes", $"--https={port}", LocalTarget()],
-            cancellationToken);
+            cancellationToken,
+            AuthorizationTimeout,
+            output =>
+            {
+                var candidate = TailscaleAuthorizationUrl.Find(output);
+                if (candidate is null)
+                    return;
+                lock (authorizationGate)
+                {
+                    if (authorizationUri is not null)
+                        return;
+                    authorizationUri = candidate;
+                }
+                progress?.Report(new FunnelProgress(
+                    "请在浏览器中完成 Tailscale 授权，然后返回 PalPeek。",
+                    candidate));
+            });
+        if (result.TimedOut)
+        {
+            throw new InvalidOperationException(authorizationUri is null
+                ? "Tailscale 配置超时，且没有返回可打开的授权页面。请确认 Tailscale 已更新并保持连接，然后重试。"
+                : "等待 Tailscale 授权超时。请完成浏览器中的授权，然后再次点击“配置入口”。");
+        }
         if (result.ExitCode != 0)
-            throw new InvalidOperationException(FriendlyError(result.Error));
+            throw new InvalidOperationException(FriendlyError(
+                string.IsNullOrWhiteSpace(result.Error) ? result.Output : result.Error));
 
         var updated = await GetStateAsync(cancellationToken);
         if (!updated.Configured)
@@ -159,10 +190,12 @@ public sealed class FunnelManager
 
     private async Task<CommandResult> RunAsync(
         IReadOnlyList<string> arguments,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TimeSpan? commandTimeout = null,
+        Action<string>? outputChanged = null)
     {
         if (string.IsNullOrWhiteSpace(_executable))
-            return new(-1, string.Empty, "未安装 Tailscale。");
+            return new(-1, string.Empty, "未安装 Tailscale。", false);
         using var process = new Process
         {
             StartInfo = new ProcessStartInfo
@@ -177,10 +210,12 @@ public sealed class FunnelManager
         foreach (var argument in arguments)
             process.StartInfo.ArgumentList.Add(argument);
         process.Start();
-        var output = process.StandardOutput.ReadToEndAsync();
-        var error = process.StandardError.ReadToEndAsync();
+        var output = new StringBuilder();
+        var error = new StringBuilder();
+        var outputTask = PumpAsync(process.StandardOutput, output, outputChanged);
+        var errorTask = PumpAsync(process.StandardError, error, outputChanged);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(CommandTimeout);
+        timeout.CancelAfter(commandTimeout ?? CommandTimeout);
         try
         {
             await process.WaitForExitAsync(timeout.Token);
@@ -190,11 +225,44 @@ public sealed class FunnelManager
             if (!process.HasExited)
                 process.Kill(entireProcessTree: true);
             await process.WaitForExitAsync(CancellationToken.None);
+            await Task.WhenAll(outputTask, errorTask);
             if (cancellationToken.IsCancellationRequested)
                 throw;
-            return new(-1, await output, "Tailscale 命令在 2 分钟内未完成，已终止相关进程。");
+            return new(
+                -1,
+                output.ToString(),
+                $"Tailscale 命令在 {(commandTimeout ?? CommandTimeout).TotalMinutes:0.#} 分钟内未完成，已终止相关进程。",
+                true);
         }
-        return new(process.ExitCode, await output, (await error).Trim());
+        await Task.WhenAll(outputTask, errorTask);
+        return new(process.ExitCode, output.ToString(), error.ToString().Trim(), false);
+    }
+
+    private static async Task PumpAsync(
+        StreamReader reader,
+        StringBuilder destination,
+        Action<string>? outputChanged)
+    {
+        var buffer = new char[256];
+        try
+        {
+            while (true)
+            {
+                var count = await reader.ReadAsync(buffer);
+                if (count == 0)
+                    return;
+                destination.Append(buffer, 0, count);
+                outputChanged?.Invoke(destination.ToString());
+            }
+        }
+        catch (IOException)
+        {
+            // Killing a timed-out process closes its redirected streams.
+        }
+        catch (ObjectDisposedException)
+        {
+            // The process may close a redirected stream while cancellation is completing.
+        }
     }
 
     private static string FindExecutable()
@@ -209,5 +277,5 @@ public sealed class FunnelManager
         return candidates.FirstOrDefault(File.Exists) ?? string.Empty;
     }
 
-    private sealed record CommandResult(int ExitCode, string Output, string Error);
+    private sealed record CommandResult(int ExitCode, string Output, string Error, bool TimedOut);
 }

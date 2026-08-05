@@ -142,8 +142,16 @@
         </Grid>
 
         <Grid Grid.Row="3" Margin="0,14,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
             <TextBlock x:Name="StatusText" Foreground="{StaticResource SecondaryTextBrush}"
-                       VerticalAlignment="Center"/>
+                       VerticalAlignment="Center" TextWrapping="Wrap"/>
+            <Button x:Name="OpenAuthorizationButton" Grid.Column="1"
+                    Content="打开授权页面" Visibility="Collapsed"
+                    Style="{StaticResource SecondaryButtonStyle}"
+                    Margin="12,0,0,0" Click="OpenAuthorizationButton_Click"/>
         </Grid>
     </Grid>
     </ScrollViewer>
