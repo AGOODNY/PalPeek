@@ -17,6 +17,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private readonly SharingControl _sharing;
     private readonly GameArtworkService _artwork;
     private readonly DiagnosticsWindow _diagnosticsPage;
+    private readonly BrowserSharingPage _browserSharingPage;
     private string _networkStatus = "正在检查 Tailscale…";
     private bool _isNetworkLoading = true;
     private string _localStatus = "没有运行中的游戏";
@@ -47,6 +48,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ITailscaleService tailscale,
         HostStateStore hostState,
         SharingControl sharing,
+        PalPeekOptions options,
+        ConfigStore config,
+        WebInviteService webInvites,
+        FunnelManager funnel,
         SettingsWindowFactory settingsFactory,
         DiagnosticsWindowFactory diagnosticsFactory,
         GameArtworkService artwork)
@@ -65,6 +70,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             UninstallRequested?.Invoke(this, EventArgs.Empty);
         settingsPage.HelpRequested += (_, _) => OpenHelp();
         SettingsPage.Content = settingsPage;
+        _browserSharingPage = new BrowserSharingPage(
+            options,
+            config,
+            webInvites,
+            funnel,
+            hostState);
+        BrowserSharingPageHost.Content = _browserSharingPage;
         _diagnosticsPage = diagnosticsFactory.Create();
         DiagnosticsPage.Content = _diagnosticsPage;
         HelpPage.Content = new FaqWindow();
@@ -84,6 +96,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             _tailscale.SnapshotChanged -= Tailscale_SnapshotChanged;
             _hostState.Changed -= HostState_Changed;
             _sharing.Changed -= Sharing_Changed;
+            _browserSharingPage.Dispose();
         };
         StateChanged += (_, _) =>
             MaximizeButton.Content = WindowState == WindowState.Maximized
@@ -363,6 +376,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private void SettingsNav_Checked(object sender, RoutedEventArgs e) =>
         NavigateTo(AppPage.Settings);
 
+    private void BrowserSharingNav_Checked(object sender, RoutedEventArgs e) =>
+        NavigateTo(AppPage.BrowserSharing);
+
     private async void DiagnosticsNav_Checked(object sender, RoutedEventArgs e)
     {
         NavigateTo(AppPage.Diagnostics);
@@ -375,6 +391,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private void NavigateTo(AppPage page)
     {
         if (HallPage is null ||
+            BrowserSharingPageHost is null ||
             SettingsPage is null ||
             DiagnosticsPage is null ||
             HelpPage is null)
@@ -382,6 +399,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return;
         }
         HallPage.Visibility = page == AppPage.Hall ? Visibility.Visible : Visibility.Collapsed;
+        BrowserSharingPageHost.Visibility = page == AppPage.BrowserSharing
+            ? Visibility.Visible
+            : Visibility.Collapsed;
         SettingsPage.Visibility = page == AppPage.Settings ? Visibility.Visible : Visibility.Collapsed;
         DiagnosticsPage.Visibility = page == AppPage.Diagnostics ? Visibility.Visible : Visibility.Collapsed;
         HelpPage.Visibility = page == AppPage.Help ? Visibility.Visible : Visibility.Collapsed;
@@ -644,6 +664,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 internal enum AppPage
 {
     Hall,
+    BrowserSharing,
     Settings,
     Diagnostics,
     Help

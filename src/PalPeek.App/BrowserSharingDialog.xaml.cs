@@ -18,7 +18,7 @@ public sealed record WebInviteItem(
     public string UrlText => Url ?? "配置 Funnel 后会生成固定公网地址";
 }
 
-public partial class BrowserSharingDialog : Window
+public partial class BrowserSharingPage : System.Windows.Controls.UserControl, IDisposable
 {
     private readonly PalPeekOptions _options;
     private readonly ConfigStore _config;
@@ -28,7 +28,7 @@ public partial class BrowserSharingDialog : Window
     private CancellationTokenSource? _funnelCancellation;
     private bool _loading;
 
-    public BrowserSharingDialog(
+    public BrowserSharingPage(
         PalPeekOptions options,
         ConfigStore config,
         WebInviteService invites,
@@ -42,22 +42,21 @@ public partial class BrowserSharingDialog : Window
         _hostState = hostState;
         InitializeComponent();
         DataContext = this;
-        Loaded += BrowserSharingDialog_Loaded;
+        Loaded += BrowserSharingPage_Loaded;
         _invites.Changed += Invites_Changed;
         _hostState.Changed += HostState_Changed;
     }
 
     public ObservableCollection<WebInviteItem> Invites { get; } = [];
 
-    protected override void OnClosed(EventArgs e)
+    public void Dispose()
     {
         _funnelCancellation?.Cancel();
         _invites.Changed -= Invites_Changed;
         _hostState.Changed -= HostState_Changed;
-        base.OnClosed(e);
     }
 
-    private async void BrowserSharingDialog_Loaded(object sender, RoutedEventArgs e)
+    private async void BrowserSharingPage_Loaded(object sender, RoutedEventArgs e)
     {
         _loading = true;
         EnabledCheckBox.IsChecked = _options.BrowserSharing.Enabled;
@@ -233,7 +232,7 @@ public partial class BrowserSharingDialog : Window
         var item = ItemFromButton(sender);
         if (item is null)
             return;
-        var prompt = new InvitePasswordDialog { Owner = this };
+        var prompt = new InvitePasswordDialog { Owner = Window.GetWindow(this) };
         if (prompt.ShowDialog() != true)
             return;
         try

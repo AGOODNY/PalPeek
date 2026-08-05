@@ -96,6 +96,16 @@
                                     <TextBlock Text="观战大厅" FontSize="15"/>
                                 </StackPanel>
                             </RadioButton>
+                            <RadioButton x:Name="BrowserSharingNav" GroupName="Navigation"
+                                         Style="{StaticResource NavRadioStyle}"
+                                         Height="48" Margin="22,0,10,5"
+                                         Checked="BrowserSharingNav_Checked">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE774;" FontFamily="Segoe Fluent Icons"
+                                               FontSize="16" Width="28"/>
+                                    <TextBlock Text="网页观战" FontSize="14"/>
+                                </StackPanel>
+                            </RadioButton>
                             <RadioButton x:Name="SettingsNav" GroupName="Navigation"
                                          Style="{StaticResource NavRadioStyle}"
                                          Checked="SettingsNav_Checked">
@@ -142,7 +152,7 @@
                                            Foreground="{StaticResource SecondaryTextBrush}"
                                            FontSize="10" TextWrapping="Wrap"
                                            Margin="0,7,0,0"/>
-                                <TextBlock Text="PALPEEK v0.5.0"
+                                <TextBlock Text="PALPEEK v0.5.1"
                                            FontFamily="Bahnschrift"
                                            Foreground="{StaticResource MutedTextBrush}"
                                            FontSize="9" Margin="0,12,0,0"/>
@@ -425,6 +435,7 @@
                         </Grid>
                     </Grid>
 
+                    <ContentControl x:Name="BrowserSharingPageHost" Visibility="Collapsed"/>
                     <ContentControl x:Name="SettingsPage" Visibility="Collapsed"/>
                     <ContentControl x:Name="DiagnosticsPage" Visibility="Collapsed"/>
                     <ContentControl x:Name="HelpPage" Visibility="Collapsed"/>

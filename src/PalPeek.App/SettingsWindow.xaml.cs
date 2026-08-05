@@ -15,9 +15,6 @@ public partial class SettingsWindow : System.Windows.Controls.UserControl, INoti
     private readonly ConfigStore _config;
     private readonly StartupManager _startup;
     private readonly SharingControl _sharing;
-    private readonly WebInviteService _webInvites;
-    private readonly FunnelManager _funnel;
-    private readonly HostStateStore _hostState;
     private QualityOption _selectedQualityOption;
     private string _saveStatus = string.Empty;
 
@@ -27,18 +24,12 @@ public partial class SettingsWindow : System.Windows.Controls.UserControl, INoti
         StartupManager startup,
         SharingControl sharing,
         SteamCatalog catalog,
-        GameArtworkService artwork,
-        WebInviteService webInvites,
-        FunnelManager funnel,
-        HostStateStore hostState)
+        GameArtworkService artwork)
     {
         _options = options;
         _config = config;
         _startup = startup;
         _sharing = sharing;
-        _webInvites = webInvites;
-        _funnel = funnel;
-        _hostState = hostState;
         Games = new ObservableCollection<GameSharingOption>(
             catalog.Apps
                 .OrderBy(game => game.Name, StringComparer.CurrentCultureIgnoreCase)
@@ -194,20 +185,6 @@ public partial class SettingsWindow : System.Windows.Controls.UserControl, INoti
 
     private void FaqButton_Click(object sender, RoutedEventArgs e)
         => HelpRequested?.Invoke(this, EventArgs.Empty);
-
-    private void BrowserWatchButton_Click(object sender, RoutedEventArgs e)
-    {
-        var dialog = new BrowserSharingDialog(
-            _options,
-            _config,
-            _webInvites,
-            _funnel,
-            _hostState)
-        {
-            Owner = Window.GetWindow(this)
-        };
-        dialog.ShowDialog();
-    }
 
     private void UninstallButton_Click(object sender, RoutedEventArgs e) =>
         UninstallRequested?.Invoke(this, EventArgs.Empty);
