@@ -59,6 +59,26 @@ public sealed class SunshineProtocolTests
     }
 
     [Fact]
+    public void EnsureSuccess_LocalizesWebStreamFailure()
+    {
+        const string json = """
+            {
+              "ok": false,
+              "error": {
+                "code": "web_stream_failed",
+                "message": "AAC encoder is unavailable"
+              }
+            }
+            """;
+
+        var error = Assert.Throws<SunshineProtocolException>(
+            () => SunshineProtocol.EnsureSuccess(json));
+
+        Assert.Equal("web_stream_failed", error.Code);
+        Assert.Equal("启动网页媒体流失败。", error.Message);
+    }
+
+    [Fact]
     public void ParseStatusResponse_RejectsProtocolMismatch()
     {
         const string json = """

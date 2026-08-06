@@ -194,6 +194,7 @@ public static class SunshineProtocol
             "stale_session" => "观战会话已经结束。",
             "invalid_pin" => "Moonlight 配对码无效。",
             "pairing_rejected" => "Sunshine 拒绝了 Moonlight 配对请求。",
+            "web_stream_failed" => "启动网页媒体流失败。",
             "unknown_command" => "PalPeek Host 不支持这项操作。",
             "command_too_large" or "invalid_json" =>
                 "PalPeek Host 收到了无效请求。",

@@ -64,6 +64,20 @@ $sunshineBuild = Join-Path $projectRoot "third_party\Sunshine\build\sunshine.exe
 if (-not (Test-Path $sunshineBuild)) {
     throw "PalPeek Host has not been built: $sunshineBuild"
 }
+$sunshineRoot = Join-Path $projectRoot "third_party\Sunshine"
+$sunshineSourceStatus = & git -C $sunshineRoot status --porcelain --untracked-files=no -- `
+    src cmake CMakeLists.txt
+Assert-LastExitCode "Sunshine source status check"
+if ($sunshineSourceStatus) {
+    throw "PalPeek Host source has uncommitted changes. Commit and rebuild Sunshine before packaging."
+}
+$sunshineCommit = (& git -C $sunshineRoot rev-parse --short=7 HEAD).Trim()
+Assert-LastExitCode "Sunshine commit check"
+$sunshineProductVersion = (Get-Item -LiteralPath $sunshineBuild).VersionInfo.ProductVersion
+if ([string]::IsNullOrWhiteSpace($sunshineProductVersion) -or
+    $sunshineProductVersion.IndexOf($sunshineCommit, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+    throw "PalPeek Host build is stale: expected commit $sunshineCommit, found '$sunshineProductVersion'."
+}
 Copy-Item $sunshineBuild $sunshineDestination -Force
 Copy-Item (Join-Path $projectRoot "packaging\sunshine\palpeek.conf") $sunshineDestination -Force
 $sunshineAssets = Join-Path $projectRoot "third_party\Sunshine\build\assets"

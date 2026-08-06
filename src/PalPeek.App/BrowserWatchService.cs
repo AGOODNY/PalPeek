@@ -222,11 +222,18 @@ public sealed class BrowserWatchService : BackgroundService
             {
                 return Results.Conflict(new { code = "viewer_limit", message = ex.Message });
             }
-            catch
+            catch (Exception ex) when (ex is SunshineProtocolException or IOException or
+                                       TimeoutException or InvalidOperationException)
             {
                 if (lease is not null)
                     _leases.Release(lease.Id);
-                throw;
+                return Results.Json(
+                    new
+                    {
+                        code = "stream_start_failed",
+                        message = WebStreamStartFailureMessage(ex)
+                    },
+                    statusCode: StatusCodes.Status503ServiceUnavailable);
             }
             if (lease is null)
                 return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
@@ -346,6 +353,16 @@ public sealed class BrowserWatchService : BackgroundService
     private static IResult WatchingDisabled() => Results.Json(
         new { code = "watching_disabled", message = "主播尚未开启网页观战。" },
         statusCode: StatusCodes.Status403Forbidden);
+
+    private static string WebStreamStartFailureMessage(Exception exception) => exception switch
+    {
+        SunshineProtocolException { Code: "unknown_command" } =>
+            "内置 PalPeek Host 版本过旧，请更新或重新安装 PalPeek。",
+        SunshineProtocolException => $"无法启动网页媒体流：{exception.Message}",
+        TimeoutException => "启动网页媒体流超时，请稍后重试。",
+        IOException => "无法连接本机 PalPeek Host，请重启 PalPeek 后重试。",
+        _ => "无法启动网页媒体流，请重启 PalPeek 后重试。"
+    };
 
     private static string AuthPartition(HttpContext context)
     {
