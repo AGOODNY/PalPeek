@@ -131,6 +131,9 @@ public static class SunshineProtocol
     public static bool IsRetryablePairingError(Exception exception) =>
         exception is SunshineProtocolException { Code: "pairing_rejected" };
 
+    public static bool IsStaleSessionError(Exception exception) =>
+        exception is SunshineProtocolException { Code: "stale_session" };
+
     private static JsonDocument ParseSuccessfulResponse(string response)
     {
         if (string.IsNullOrWhiteSpace(response))

@@ -154,7 +154,7 @@
                                            Foreground="{StaticResource SecondaryTextBrush}"
                                            FontSize="10" TextWrapping="Wrap"
                                            Margin="0,7,0,0"/>
-                                <TextBlock Text="PALPEEK v1.0.1"
+                                <TextBlock Text="PALPEEK v1.0.2"
                                            FontFamily="Bahnschrift"
                                            Foreground="{StaticResource MutedTextBrush}"
                                            FontSize="9" Margin="0,12,0,0"/>

@@ -287,19 +287,36 @@ public sealed class SunshineBridge : IHostedService, IAsyncDisposable
             sessionId
         }, cancellationToken);
 
-    public Task StartWebStreamAsync(
-        string sessionId,
+    public async Task StartWebStreamAsync(
+        GameInfo game,
         BrowserStreamQuality quality,
         string mediaPipe,
-        CancellationToken cancellationToken) =>
-        SendAsync(new
+        CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < 2; attempt++)
         {
-            protocolVersion = SunshineProtocol.Version,
-            command = "startWebStream",
-            sessionId,
-            quality = quality.ToString(),
-            mediaPipe
-        }, cancellationToken);
+            await EnsureTargetAsync(game, cancellationToken);
+            try
+            {
+                await SendAsync(new
+                {
+                    protocolVersion = SunshineProtocol.Version,
+                    command = "startWebStream",
+                    sessionId = game.SessionId,
+                    quality = quality.ToString(),
+                    mediaPipe
+                }, cancellationToken);
+                return;
+            }
+            catch (Exception ex) when (
+                attempt == 0 && SunshineProtocol.IsStaleSessionError(ex))
+            {
+                // The Host can lose its in-memory target while recovering from a
+                // capture or IPC failure. Reassert the still-current game target
+                // once before reporting that the browser session has ended.
+            }
+        }
+    }
 
     public Task StopWebStreamAsync(
         string sessionId,

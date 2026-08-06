@@ -35,12 +35,19 @@ public sealed class WebStreamCoordinator : BackgroundService
         try
         {
             if (_activeSessionId == game.SessionId)
-                return;
+            {
+                var host = await _sunshine.EnsureTargetAsync(game, cancellationToken);
+                if (host.Target?.SessionId == game.SessionId &&
+                    host.WebStream is SunshineWebStreamStatus.Starting or
+                                      SunshineWebStreamStatus.Streaming)
+                    return;
+                _activeSessionId = null;
+            }
             if (_activeSessionId is not null)
                 await StopStreamCoreAsync(cancellationToken);
             _buffer.Reset(game.SessionId);
             await _sunshine.StartWebStreamAsync(
-                game.SessionId,
+                game,
                 _options.BrowserSharing.Quality,
                 WebMediaPipeService.PipeName,
                 cancellationToken);

@@ -109,4 +109,15 @@ public sealed class SunshineProtocolTests
 
         Assert.Equal(expected, SunshineProtocol.IsRetryablePairingError(error));
     }
+
+    [Theory]
+    [InlineData("stale_session", true)]
+    [InlineData("web_stream_failed", false)]
+    [InlineData("internal_error", false)]
+    public void WebStreamRetryOnlyHandlesStaleSession(string code, bool expected)
+    {
+        var error = new SunshineProtocolException(code, "test");
+
+        Assert.Equal(expected, SunshineProtocol.IsStaleSessionError(error));
+    }
 }
