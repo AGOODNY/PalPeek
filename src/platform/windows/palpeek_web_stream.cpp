@@ -9,23 +9,22 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <future>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
 
 #include <windows.h>
-
-extern "C" {
-#include <libavcodec/avcodec.h>
-#include <libavutil/channel_layout.h>
-#include <libavutil/error.h>
-#include <libavutil/frame.h>
-}
+#include <mfapi.h>
+#include <mferror.h>
+#include <mftransform.h>
 
 #include "src/audio.h"
 #include "src/globals.h"
@@ -40,6 +39,41 @@ namespace {
   constexpr std::size_t max_media_payload = 8 * 1024 * 1024;
   constexpr int audio_sample_rate = 48000;
   constexpr int audio_channels = 2;
+  constexpr int audio_frame_samples = 1024;
+  constexpr std::uint32_t audio_bytes_per_second = 16000;
+
+  template<class T>
+  class com_ptr_t {
+  public:
+    com_ptr_t() = default;
+    ~com_ptr_t() { reset(); }
+    com_ptr_t(const com_ptr_t &) = delete;
+    com_ptr_t &operator=(const com_ptr_t &) = delete;
+
+    T *get() const { return value_; }
+    T *operator->() const { return value_; }
+    T **put() {
+      reset();
+      return &value_;
+    }
+    void reset() {
+      if (value_) {
+        value_->Release();
+        value_ = nullptr;
+      }
+    }
+
+  private:
+    T *value_ {nullptr};
+  };
+
+  void check_hresult(HRESULT result, std::string_view operation) {
+    if (FAILED(result)) {
+      throw std::runtime_error(
+        std::string {operation} + " failed (HRESULT " +
+        std::to_string(static_cast<unsigned long>(result)) + ")");
+    }
+  }
 
   class bytes_t {
   public:
@@ -519,60 +553,197 @@ namespace {
   class aac_encoder_t {
   public:
     explicit aac_encoder_t(fragment_muxer_t &muxer): muxer_ {muxer} {
-      auto codec = avcodec_find_encoder(AV_CODEC_ID_AAC);
-      if (!codec) throw std::runtime_error("AAC encoder is unavailable");
-      context_ = avcodec_alloc_context3(codec);
-      if (!context_) throw std::bad_alloc();
-      context_->sample_rate = audio_sample_rate;
-      context_->sample_fmt = AV_SAMPLE_FMT_FLTP;
-      context_->bit_rate = 128000;
-      context_->time_base = AVRational {1, audio_sample_rate};
-      av_channel_layout_default(&context_->ch_layout, audio_channels);
-      if (avcodec_open2(context_, codec, nullptr) < 0) throw std::runtime_error("Unable to initialize AAC encoder");
-      frame_ = av_frame_alloc();
-      if (!frame_) throw std::bad_alloc();
-      frame_->format = context_->sample_fmt;
-      frame_->sample_rate = context_->sample_rate;
-      frame_->nb_samples = context_->frame_size;
-      av_channel_layout_copy(&frame_->ch_layout, &context_->ch_layout);
-      if (av_frame_get_buffer(frame_, 0) < 0) throw std::runtime_error("Unable to allocate AAC frame");
+      try {
+        initialize();
+      } catch (...) {
+        shutdown();
+        throw;
+      }
     }
 
-    ~aac_encoder_t() {
-      av_frame_free(&frame_);
-      avcodec_free_context(&context_);
-    }
+    ~aac_encoder_t() { shutdown(); }
 
     void push(std::vector<float> &&samples) {
+      if (failed_) return;
       pending_.insert(pending_.end(), samples.begin(), samples.end());
-      auto required = static_cast<std::size_t>(frame_->nb_samples * audio_channels);
+      constexpr auto required = static_cast<std::size_t>(audio_frame_samples * audio_channels);
       while (pending_.size() >= required) {
-        av_frame_make_writable(frame_);
-        auto left = reinterpret_cast<float *>(frame_->data[0]);
-        auto right = reinterpret_cast<float *>(frame_->data[1]);
-        for (int index = 0; index < frame_->nb_samples; ++index) {
-          left[index] = pending_[index * 2]; right[index] = pending_[index * 2 + 1];
+        try {
+          encode_frame(pending_.data());
+        } catch (const std::exception &exception) {
+          failed_ = true;
+          BOOST_LOG(::error) << "PalPeek AAC encoder stopped: " << exception.what();
+          return;
         }
         pending_.erase(pending_.begin(), pending_.begin() + required);
-        frame_->pts = next_pts_; next_pts_ += frame_->nb_samples;
-        if (avcodec_send_frame(context_, frame_) < 0) continue;
-        AVPacket *packet = av_packet_alloc();
-        while (packet && avcodec_receive_packet(context_, packet) == 0) {
-          muxer_.audio(
-            std::vector<std::uint8_t>(packet->data, packet->data + packet->size),
-            static_cast<std::uint32_t>(packet->duration > 0 ? packet->duration : frame_->nb_samples));
-          av_packet_unref(packet);
-        }
-        av_packet_free(&packet);
       }
     }
 
   private:
+    void initialize() {
+      auto result = CoInitializeEx(nullptr, COINIT_MULTITHREADED | COINIT_SPEED_OVER_MEMORY);
+      if (FAILED(result) && result != RPC_E_CHANGED_MODE) {
+        check_hresult(result, "CoInitializeEx");
+      }
+      com_initialized_ = SUCCEEDED(result);
+
+      check_hresult(MFStartup(MF_VERSION, MFSTARTUP_LITE), "MFStartup");
+      media_foundation_started_ = true;
+
+      // CLSID_AACMFTEncoder is documented in wmcodecdsp.h but is not exported
+      // by every MinGW import library, so keep the documented identifier local.
+      static constexpr GUID aac_encoder_clsid {
+        0x93af0c51, 0x2275, 0x45d2, {0xa3, 0x5b, 0xf2, 0xba, 0x21, 0xca, 0xed, 0x00}
+      };
+      check_hresult(CoCreateInstance(
+        aac_encoder_clsid,
+        nullptr,
+        CLSCTX_INPROC_SERVER,
+        IID_IMFTransform,
+        reinterpret_cast<void **>(transform_.put())), "Create Media Foundation AAC encoder");
+
+      auto stream_result = transform_->GetStreamIDs(1, &input_stream_id_, 1, &output_stream_id_);
+      if (stream_result == E_NOTIMPL) {
+        input_stream_id_ = output_stream_id_ = 0;
+      } else {
+        check_hresult(stream_result, "Get AAC stream identifiers");
+      }
+
+      com_ptr_t<IMFMediaType> output_type;
+      check_hresult(MFCreateMediaType(output_type.put()), "Create AAC output type");
+      check_hresult(output_type->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio), "Set AAC major type");
+      check_hresult(output_type->SetGUID(MF_MT_SUBTYPE, MFAudioFormat_AAC), "Set AAC subtype");
+      check_hresult(output_type->SetUINT32(MF_MT_AUDIO_BITS_PER_SAMPLE, 16), "Set AAC bit depth");
+      check_hresult(output_type->SetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, audio_sample_rate), "Set AAC sample rate");
+      check_hresult(output_type->SetUINT32(MF_MT_AUDIO_NUM_CHANNELS, audio_channels), "Set AAC channels");
+      check_hresult(output_type->SetUINT32(MF_MT_AUDIO_AVG_BYTES_PER_SECOND, audio_bytes_per_second), "Set AAC bitrate");
+      check_hresult(output_type->SetUINT32(MF_MT_AAC_PAYLOAD_TYPE, 0), "Set AAC payload type");
+      check_hresult(output_type->SetUINT32(MF_MT_AAC_AUDIO_PROFILE_LEVEL_INDICATION, 0x29), "Set AAC profile");
+      check_hresult(transform_->SetOutputType(output_stream_id_, output_type.get(), 0), "Configure AAC output");
+
+      com_ptr_t<IMFMediaType> input_type;
+      check_hresult(MFCreateMediaType(input_type.put()), "Create PCM input type");
+      check_hresult(input_type->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio), "Set PCM major type");
+      check_hresult(input_type->SetGUID(MF_MT_SUBTYPE, MFAudioFormat_PCM), "Set PCM subtype");
+      check_hresult(input_type->SetUINT32(MF_MT_AUDIO_BITS_PER_SAMPLE, 16), "Set PCM bit depth");
+      check_hresult(input_type->SetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, audio_sample_rate), "Set PCM sample rate");
+      check_hresult(input_type->SetUINT32(MF_MT_AUDIO_NUM_CHANNELS, audio_channels), "Set PCM channels");
+      check_hresult(input_type->SetUINT32(MF_MT_AUDIO_BLOCK_ALIGNMENT, audio_channels * sizeof(std::int16_t)), "Set PCM alignment");
+      check_hresult(input_type->SetUINT32(
+        MF_MT_AUDIO_AVG_BYTES_PER_SECOND,
+        audio_sample_rate * audio_channels * sizeof(std::int16_t)), "Set PCM byte rate");
+      check_hresult(input_type->SetUINT32(MF_MT_ALL_SAMPLES_INDEPENDENT, TRUE), "Set PCM independence");
+      check_hresult(input_type->SetUINT32(MF_MT_FIXED_SIZE_SAMPLES, TRUE), "Set PCM sample size mode");
+      check_hresult(transform_->SetInputType(input_stream_id_, input_type.get(), 0), "Configure PCM input");
+
+      check_hresult(transform_->GetOutputStreamInfo(output_stream_id_, &output_info_), "Get AAC output information");
+      check_hresult(transform_->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0), "Begin AAC streaming");
+      check_hresult(transform_->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0), "Start AAC stream");
+    }
+
+    void shutdown() {
+      if (transform_.get()) {
+        transform_->ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, 0);
+        transform_->ProcessMessage(MFT_MESSAGE_NOTIFY_END_STREAMING, 0);
+      }
+      transform_.reset();
+      if (media_foundation_started_) {
+        MFShutdown();
+        media_foundation_started_ = false;
+      }
+      if (com_initialized_) {
+        CoUninitialize();
+        com_initialized_ = false;
+      }
+    }
+
+    void encode_frame(const float *samples) {
+      constexpr auto byte_count = audio_frame_samples * audio_channels * sizeof(std::int16_t);
+      com_ptr_t<IMFMediaBuffer> input_buffer;
+      check_hresult(MFCreateMemoryBuffer(byte_count, input_buffer.put()), "Allocate PCM buffer");
+      BYTE *destination = nullptr;
+      check_hresult(input_buffer->Lock(&destination, nullptr, nullptr), "Lock PCM buffer");
+      auto pcm = reinterpret_cast<std::int16_t *>(destination);
+      for (std::size_t index = 0; index < audio_frame_samples * audio_channels; ++index) {
+        auto value = std::clamp(samples[index], -1.0f, 1.0f);
+        pcm[index] = static_cast<std::int16_t>(std::lround(value * 32767.0f));
+      }
+      input_buffer->Unlock();
+      check_hresult(input_buffer->SetCurrentLength(byte_count), "Commit PCM buffer");
+
+      com_ptr_t<IMFSample> input_sample;
+      check_hresult(MFCreateSample(input_sample.put()), "Create PCM sample");
+      check_hresult(input_sample->AddBuffer(input_buffer.get()), "Attach PCM buffer");
+      auto sample_time = next_sample_ * 10'000'000LL / audio_sample_rate;
+      auto sample_duration = audio_frame_samples * 10'000'000LL / audio_sample_rate;
+      check_hresult(input_sample->SetSampleTime(sample_time), "Set PCM timestamp");
+      check_hresult(input_sample->SetSampleDuration(sample_duration), "Set PCM duration");
+
+      auto result = transform_->ProcessInput(input_stream_id_, input_sample.get(), 0);
+      if (result == MF_E_NOTACCEPTING) {
+        drain_output();
+        result = transform_->ProcessInput(input_stream_id_, input_sample.get(), 0);
+      }
+      check_hresult(result, "Encode PCM input");
+      next_sample_ += audio_frame_samples;
+      drain_output();
+    }
+
+    void drain_output() {
+      while (true) {
+        IMFSample *sample = nullptr;
+        if (!(output_info_.dwFlags & MFT_OUTPUT_STREAM_PROVIDES_SAMPLES)) {
+          check_hresult(MFCreateSample(&sample), "Create AAC sample");
+          IMFMediaBuffer *buffer = nullptr;
+          auto capacity = std::max<DWORD>(output_info_.cbSize, 64 * 1024);
+          auto result = MFCreateMemoryBuffer(capacity, &buffer);
+          if (SUCCEEDED(result)) result = sample->AddBuffer(buffer);
+          if (buffer) buffer->Release();
+          if (FAILED(result)) {
+            sample->Release();
+            check_hresult(result, "Allocate AAC output");
+          }
+        }
+
+        MFT_OUTPUT_DATA_BUFFER output {};
+        output.dwStreamID = output_stream_id_;
+        output.pSample = sample;
+        DWORD status = 0;
+        auto result = transform_->ProcessOutput(0, 1, &output, &status);
+        if (output.pEvents) output.pEvents->Release();
+        if (result == MF_E_TRANSFORM_NEED_MORE_INPUT) {
+          if (output.pSample) output.pSample->Release();
+          return;
+        }
+        if (FAILED(result)) {
+          if (output.pSample) output.pSample->Release();
+          check_hresult(result, "Read AAC output");
+        }
+
+        com_ptr_t<IMFMediaBuffer> contiguous;
+        check_hresult(output.pSample->ConvertToContiguousBuffer(contiguous.put()), "Read AAC sample");
+        BYTE *payload = nullptr;
+        DWORD length = 0;
+        check_hresult(contiguous->Lock(&payload, nullptr, &length), "Lock AAC sample");
+        std::vector<std::uint8_t> encoded(payload, payload + length);
+        contiguous->Unlock();
+        output.pSample->Release();
+        if (!encoded.empty()) {
+          muxer_.audio(std::move(encoded), audio_frame_samples);
+        }
+      }
+    }
+
     fragment_muxer_t &muxer_;
-    AVCodecContext *context_ {nullptr};
-    AVFrame *frame_ {nullptr};
+    com_ptr_t<IMFTransform> transform_;
+    MFT_OUTPUT_STREAM_INFO output_info_ {};
+    DWORD input_stream_id_ {0};
+    DWORD output_stream_id_ {0};
+    bool com_initialized_ {false};
+    bool media_foundation_started_ {false};
+    bool failed_ {false};
     std::vector<float> pending_;
-    std::int64_t next_pts_ {0};
+    std::int64_t next_sample_ {0};
   };
 
   struct stream_context_t {
@@ -582,7 +753,6 @@ namespace {
     video::packet_queue_t video_packets;
     pipe_writer_t pipe;
     std::unique_ptr<fragment_muxer_t> muxer;
-    std::unique_ptr<aac_encoder_t> aac;
     std::thread video_capture;
     std::thread audio_capture;
     std::thread video_output;
@@ -652,8 +822,28 @@ namespace palpeek::web_stream {
         context.reset(); current_state.store(state_t::error); current_error = error; return false;
       }
       context->muxer = std::make_unique<fragment_muxer_t>(session_id, fps, context->pipe);
-      context->aac = std::make_unique<aac_encoder_t>(*context->muxer);
       auto raw = context.get();
+      auto audio_ready = std::make_shared<std::promise<std::string>>();
+      auto audio_result = audio_ready->get_future();
+      raw->audio_capture = std::thread([raw, audio_ready]() {
+        bool initialized = false;
+        try {
+          aac_encoder_t encoder {*raw->muxer};
+          audio_ready->set_value({});
+          initialized = true;
+          audio::capture(raw->mail, audio_config(), raw, [&encoder](std::vector<float> &&samples) {
+            encoder.push(std::move(samples));
+          });
+        } catch (const std::exception &exception) {
+          if (!initialized) {
+            audio_ready->set_value(exception.what());
+          } else {
+            BOOST_LOG(::error) << "PalPeek audio capture stopped: " << exception.what();
+          }
+        }
+      });
+      auto audio_error = audio_result.get();
+      if (!audio_error.empty()) throw std::runtime_error(audio_error);
       raw->video_output = std::thread([raw]() {
         auto idr = raw->mail->event<bool>(mail::idr);
         int frames = 0;
@@ -664,11 +854,6 @@ namespace palpeek::web_stream {
       });
       raw->video_capture = std::thread([raw]() {
         video::capture(raw->mail, video_config(raw->fps), raw, raw->video_packets);
-      });
-      raw->audio_capture = std::thread([raw]() {
-        audio::capture(raw->mail, audio_config(), raw, [raw](std::vector<float> &&samples) {
-          raw->aac->push(std::move(samples));
-        });
       });
       current_state.store(state_t::streaming);
       current_error.clear();
