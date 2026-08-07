@@ -13,6 +13,7 @@ public sealed class WebMediaBuffer
     private byte[]? _initialization;
     private readonly SortedDictionary<long, WebMediaSegment> _segments = new();
     private string? _error;
+    private int _targetDurationSeconds = 1;
 
     public void Reset(string sessionId)
     {
@@ -22,6 +23,7 @@ public sealed class WebMediaBuffer
             _initialization = null;
             _segments.Clear();
             _error = null;
+            _targetDurationSeconds = 1;
         }
     }
 
@@ -33,6 +35,7 @@ public sealed class WebMediaBuffer
             _initialization = null;
             _segments.Clear();
             _error = null;
+            _targetDurationSeconds = 1;
         }
     }
 
@@ -59,6 +62,9 @@ public sealed class WebMediaBuffer
             if (_sessionId != sessionId)
                 return false;
             _segments[segment.Sequence] = segment;
+            _targetDurationSeconds = Math.Max(
+                _targetDurationSeconds,
+                (int)Math.Ceiling(segment.DurationMilliseconds / 1000d));
             while (_segments.Count > MaximumSegments)
                 _segments.Remove(_segments.Keys.First());
             return true;
@@ -98,7 +104,8 @@ public sealed class WebMediaBuffer
             var builder = new StringBuilder()
                 .AppendLine("#EXTM3U")
                 .AppendLine("#EXT-X-VERSION:7")
-                .AppendLine("#EXT-X-TARGETDURATION:2")
+                .Append("#EXT-X-TARGETDURATION:")
+                .AppendLine(_targetDurationSeconds.ToString(CultureInfo.InvariantCulture))
                 .AppendLine($"#EXT-X-MEDIA-SEQUENCE:{first.Sequence}")
                 .AppendLine("#EXT-X-INDEPENDENT-SEGMENTS")
                 .AppendLine("#EXT-X-MAP:URI=\"init.mp4\"");

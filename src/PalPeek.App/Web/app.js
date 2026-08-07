@@ -130,6 +130,7 @@
   });
 
   function attachPlayer(url) {
+    detachPlayer();
     if (player.canPlayType('application/vnd.apple.mpegurl')) {
       player.src = url;
       player.play().then(() => { overlay.hidden = true; }).catch(showPlayError);
@@ -139,8 +140,9 @@
       hls = new window.Hls({
         liveSyncDurationCount: 3,
         liveMaxLatencyDurationCount: 7,
-        manifestLoadingMaxRetry: 12,
-        manifestLoadingRetryDelay: 750
+        manifestLoadingMaxRetry: 4,
+        manifestLoadingRetryDelay: 1000,
+        manifestLoadingMaxRetryTimeout: 8000
       });
       hls.loadSource(url);
       hls.attachMedia(player);
@@ -149,8 +151,7 @@
       hls.on(window.Hls.Events.ERROR, (_, data) => {
         if (!data.fatal) return;
         if (data.type === window.Hls.ErrorTypes.NETWORK_ERROR) {
-          showOverlay('正在重新连接', '网络暂时中断，PalPeek 正在重试。');
-          hls.startLoad();
+          showPlayError(new Error('视频连接中断，请重新开始观战。'));
         } else if (data.type === window.Hls.ErrorTypes.MEDIA_ERROR) {
           showOverlay('正在恢复播放', '浏览器正在重新初始化解码器。');
           hls.recoverMediaError();
@@ -164,33 +165,47 @@
   }
 
   function showPlayError(error) {
+    stopPlayback(true);
     $('watchError').textContent = error.message;
     showOverlay('播放未能启动', error.message, true);
   }
 
   function startHeartbeat() {
-    clearInterval(heartbeatTimer);
-    heartbeatTimer = setInterval(async () => {
-      if (!leaseId) return;
+    clearTimeout(heartbeatTimer);
+    const sendHeartbeat = async () => {
+      const activeLeaseId = leaseId;
+      if (!activeLeaseId) return;
       try {
-        await jsonFetch(`/api/web/v1/viewers/${encodeURIComponent(leaseId)}/heartbeat`, {
+        await jsonFetch(`/api/web/v1/viewers/${encodeURIComponent(activeLeaseId)}/heartbeat`, {
           method: 'PUT', body: '{}'
         });
-      } catch {
-        stopPlayback(false);
-        showOverlay('连接已经过期', '请重新点击开始观战。', Boolean(status?.canWatch));
+      } catch (error) {
+        if (leaseId !== activeLeaseId) return;
+        if (error.status === 401 || error.status === 404) {
+          stopPlayback(false);
+          showOverlay('连接已经过期', '请重新点击开始观战。', Boolean(status?.canWatch));
+          return;
+        }
+        setBadge('正在重新连接');
       }
-    }, 5000);
+      if (leaseId === activeLeaseId)
+        heartbeatTimer = setTimeout(sendHeartbeat, 5000);
+    };
+    heartbeatTimer = setTimeout(sendHeartbeat, 5000);
+  }
+
+  function detachPlayer() {
+    if (hls) { hls.destroy(); hls = null; }
+    player.pause();
+    player.removeAttribute('src');
+    player.load();
   }
 
   function stopPlayback(release = true) {
     const oldLease = leaseId;
     leaseId = null;
-    clearInterval(heartbeatTimer);
-    if (hls) { hls.destroy(); hls = null; }
-    player.pause();
-    player.removeAttribute('src');
-    player.load();
+    clearTimeout(heartbeatTimer);
+    detachPlayer();
     if (release && oldLease) {
       fetch(`/api/web/v1/viewers/${encodeURIComponent(oldLease)}`, {
         method: 'DELETE', credentials: 'same-origin', keepalive: true

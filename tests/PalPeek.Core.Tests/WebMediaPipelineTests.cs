@@ -26,6 +26,37 @@ public sealed class WebMediaPipelineTests
     }
 
     [Fact]
+    public void PlaylistTargetDurationCoversLongestSegment()
+    {
+        var buffer = new WebMediaBuffer();
+        buffer.Reset("session");
+        Assert.True(buffer.SetInitialization("session", [1, 2, 3]));
+        Assert.True(buffer.AddSegment("session", new WebMediaSegment(0, 2401, [4])));
+
+        var playlist = Assert.IsType<string>(buffer.BuildPlaylist("session"));
+
+        Assert.Contains("#EXT-X-TARGETDURATION:3", playlist, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PlaylistTargetDurationDoesNotDecreaseWithinSession()
+    {
+        var buffer = new WebMediaBuffer();
+        buffer.Reset("session");
+        Assert.True(buffer.SetInitialization("session", [1, 2, 3]));
+        Assert.True(buffer.AddSegment("session", new WebMediaSegment(0, 2401, [4])));
+        for (var sequence = 1; sequence <= 12; sequence++)
+            Assert.True(buffer.AddSegment(
+                "session",
+                new WebMediaSegment(sequence, 1000, [(byte)sequence])));
+
+        var playlist = Assert.IsType<string>(buffer.BuildPlaylist("session"));
+
+        Assert.DoesNotContain("segment-0.m4s", playlist, StringComparison.Ordinal);
+        Assert.Contains("#EXT-X-TARGETDURATION:3", playlist, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task NamedPipeAcceptsInitializationAndMediaMessagesInOrder()
     {
         const string sessionId = "pipe-test-session";

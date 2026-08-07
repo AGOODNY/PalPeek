@@ -48,16 +48,6 @@ public sealed class BrowserWatchService : BackgroundService
         builder.Services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-            options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(_ =>
-                RateLimitPartition.GetFixedWindowLimiter(
-                    "global",
-                    _ => new FixedWindowRateLimiterOptions
-                    {
-                        PermitLimit = 900,
-                        Window = TimeSpan.FromMinutes(1),
-                        QueueLimit = 0,
-                        AutoReplenishment = true
-                    }));
             options.AddPolicy("web-auth", context =>
                 RateLimitPartition.GetFixedWindowLimiter(
                     AuthPartition(context),
@@ -217,6 +207,9 @@ public sealed class BrowserWatchService : BackgroundService
                     auth.ViewerName,
                     ViewerTransport.Browser);
                 await _streams.EnsureStartedAsync(status.Game, cancellationToken);
+                lease = _leases.Heartbeat(lease.Id);
+                await WaitForPlaylistAsync(lease.SessionId, cancellationToken);
+                lease = _leases.Heartbeat(lease.Id);
             }
             catch (LeaseCapacityException ex)
             {
@@ -234,6 +227,12 @@ public sealed class BrowserWatchService : BackgroundService
                         message = WebStreamStartFailureMessage(ex)
                     },
                     statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+            catch
+            {
+                if (lease is not null)
+                    _leases.Release(lease.Id);
+                throw;
             }
             if (lease is null)
                 return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
@@ -276,27 +275,20 @@ public sealed class BrowserWatchService : BackgroundService
             return Results.Ok(new { released = true });
         });
 
-        app.MapGet("/api/web/v1/playback/{id}/live.m3u8", async (
+        app.MapGet("/api/web/v1/playback/{id}/live.m3u8", (
             HttpContext context,
-            string id,
-            CancellationToken cancellationToken) =>
+            string id) =>
         {
             var lease = AuthorizedLease(context, id);
             if (lease is null)
                 return Results.Unauthorized();
-            string? playlist = null;
-            for (var attempt = 0; attempt < 50 && playlist is null; attempt++)
-            {
-                playlist = _media.BuildPlaylist(lease.SessionId);
-                if (playlist is null)
-                    await Task.Delay(100, cancellationToken);
-            }
+            var playlist = _media.BuildPlaylist(lease.SessionId);
             return playlist is null
                 ? Results.Json(
                     new { code = "stream_starting", message = _media.GetError(lease.SessionId) ?? "视频正在准备。" },
                     statusCode: StatusCodes.Status503ServiceUnavailable)
                 : Results.Text(playlist, "application/vnd.apple.mpegurl");
-        }).RequireRateLimiting("web-media");
+        });
 
         app.MapGet("/api/web/v1/playback/{id}/init.mp4", (
             HttpContext context,
@@ -333,6 +325,26 @@ public sealed class BrowserWatchService : BackgroundService
 
     private WebAuthSession? Authenticate(HttpContext context) =>
         _invites.ValidateSession(context.Request.Cookies[SessionCookie]);
+
+    private async Task WaitForPlaylistAsync(string sessionId, CancellationToken cancellationToken)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(12));
+        try
+        {
+            while (_media.BuildPlaylist(sessionId) is null)
+            {
+                var error = _media.GetError(sessionId);
+                if (!string.IsNullOrWhiteSpace(error))
+                    throw new InvalidOperationException(error);
+                await Task.Delay(100, timeout.Token);
+            }
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new TimeoutException("等待首个网页视频分片超时。");
+        }
+    }
 
     private ViewerLease? AuthorizedLease(HttpContext context, string id)
     {
