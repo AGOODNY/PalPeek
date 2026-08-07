@@ -88,6 +88,14 @@ public static class SunshineProtocol
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
     };
 
+    private static readonly JsonSerializerOptions CommandJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
+    public static string SerializeCommand<T>(T command) =>
+        JsonSerializer.Serialize(command, CommandJsonOptions);
+
     public static SunshineRuntimeStatus ParseStatusResponse(string response)
     {
         using var document = ParseSuccessfulResponse(response);
@@ -185,6 +193,7 @@ public static class SunshineProtocol
             "invalid_window" => "目标游戏窗口无效或已关闭。",
             "target_unavailable" or "window_unavailable" =>
                 "目标游戏窗口暂时不可用。",
+            "target_sync_failed" => "PalPeek Host 未接受当前游戏会话。",
             "capture_api_unavailable" => "当前系统不支持游戏窗口捕获。",
             "window_capture_failed" or "capture_session_failed" or
                 "capture_start_failed" or "frame_capture_failed" =>

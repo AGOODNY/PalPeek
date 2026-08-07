@@ -194,12 +194,20 @@ public sealed class SunshineBridge : IHostedService, IAsyncDisposable
                         pid = game.ProcessId,
                         hwnd = game.WindowHandle,
                         appId = game.AppId.ToString(),
-                        game.Name,
-                        game.SessionId,
+                        name = game.Name,
+                        sessionId = game.SessionId,
                         capture = "window",
                         audio = "processTree"
                     }, cancellationToken);
                     status = await GetStatusAsync(cancellationToken);
+                    if (status.Target?.Pid != game.ProcessId ||
+                        status.Target.Hwnd != game.WindowHandle ||
+                        status.Target.SessionId != game.SessionId)
+                    {
+                        throw new SunshineProtocolException(
+                            "target_sync_failed",
+                            "PalPeek Host 未接受当前游戏会话。");
+                    }
                 }
                 return status;
             }
@@ -420,7 +428,8 @@ public sealed class SunshineBridge : IHostedService, IAsyncDisposable
                 PipeDirection.InOut,
                 PipeOptions.Asynchronous);
             await pipe.ConnectAsync(timeout.Token);
-            var payload = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(command) + "\n");
+            var payload = Encoding.UTF8.GetBytes(
+                SunshineProtocol.SerializeCommand(command) + "\n");
             await pipe.WriteAsync(payload, timeout.Token);
             await pipe.FlushAsync(timeout.Token);
             using var reader = new StreamReader(pipe, Encoding.UTF8, false, leaveOpen: true);

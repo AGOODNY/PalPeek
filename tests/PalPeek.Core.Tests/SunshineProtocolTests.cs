@@ -1,9 +1,36 @@
 using PalPeek.Core;
+using System.Text.Json;
 
 namespace PalPeek.Core.Tests;
 
 public sealed class SunshineProtocolTests
 {
+    [Fact]
+    public void SerializeCommand_UsesProtocolCamelCaseForInferredMembers()
+    {
+        var game = new GameInfo(
+            250900,
+            "The Binding of Isaac: Rebirth",
+            @"E:\SteamLibrary\steamapps\common\The Binding of Isaac Rebirth",
+            27372,
+            133506,
+            "session-1");
+
+        var json = SunshineProtocol.SerializeCommand(new
+        {
+            protocolVersion = SunshineProtocol.Version,
+            command = "setTarget",
+            game.Name,
+            game.SessionId
+        });
+        using var document = JsonDocument.Parse(json);
+
+        Assert.Equal(game.Name, document.RootElement.GetProperty("name").GetString());
+        Assert.Equal(game.SessionId, document.RootElement.GetProperty("sessionId").GetString());
+        Assert.False(document.RootElement.TryGetProperty("Name", out _));
+        Assert.False(document.RootElement.TryGetProperty("SessionId", out _));
+    }
+
     [Fact]
     public void ParseStatusResponse_ReadsAllRuntimeStates()
     {
